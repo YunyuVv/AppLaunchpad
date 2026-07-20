@@ -6,7 +6,14 @@
 	objectVersion = 77;
 	objects = {
 
+/* Begin PBXBuildFile section */
+		A36A6D9E58E93500498FEAD6 /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2481B06DA5521D3CE3F58222 /* AppDelegate.swift */; };
+		E46A0A5C160467A0C14E5B04 /* AppLaunchpadApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0915EDF9A5283181DB0CF3DB /* AppLaunchpadApp.swift */; };
+/* End PBXBuildFile section */
+
 /* Begin PBXFileReference section */
+		0915EDF9A5283181DB0CF3DB /* AppLaunchpadApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppLaunchpadApp.swift; sourceTree = "<group>"; };
+		2481B06DA5521D3CE3F58222 /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppDelegate.swift; sourceTree = "<group>"; };
 		4E5468B5E7544D5B8745AA7D /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		59C1E1B7C3ACC4BA22DFCBB0 /* AppLaunchpad.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = AppLaunchpad.entitlements; sourceTree = "<group>"; };
 		99EF354D7141BB013C65719A /* AppLaunchpad.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = AppLaunchpad.app; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -21,6 +28,15 @@
 			name = Products;
 			sourceTree = "<group>";
 		};
+		AC64924C0C060EDE2C7DB0B9 /* App */ = {
+			isa = PBXGroup;
+			children = (
+				2481B06DA5521D3CE3F58222 /* AppDelegate.swift */,
+				0915EDF9A5283181DB0CF3DB /* AppLaunchpadApp.swift */,
+			);
+			path = App;
+			sourceTree = "<group>";
+		};
 		CB8C2FB4D17FE48FBC36A491 = {
 			isa = PBXGroup;
 			children = (
@@ -32,6 +48,7 @@
 		F4AD290FC3C857C0577DD874 /* AppLaunchpad */ = {
 			isa = PBXGroup;
 			children = (
+				AC64924C0C060EDE2C7DB0B9 /* App */,
 				59C1E1B7C3ACC4BA22DFCBB0 /* AppLaunchpad.entitlements */,
 				4E5468B5E7544D5B8745AA7D /* Info.plist */,
 			);
@@ -96,6 +113,8 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				A36A6D9E58E93500498FEAD6 /* AppDelegate.swift in Sources */,
+				E46A0A5C160467A0C14E5B04 /* AppLaunchpadApp.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
