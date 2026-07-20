@@ -142,3 +142,13 @@ HStack(spacing: 0) {
 - 关闭动画暂未实现（面板直接消失，后续迭代优化）
 - 主屏幕目前硬编码，Phase 7 设置页面中添加「显示在鼠标所在屏幕」可配置项
 - F4 全局快捷键和 Dock 图标集成在 Phase 3 实现
+
+### Bug 9：翻页无效（canBecomeKey 修复后引入）
+**原因 A**：`LaunchpadViewModel.itemsPerPage` 使用 `NSScreen.main`（当前焦点屏幕），若焦点在副屏则列数计算错误，可能导致所有 App 只被分配到1页，无页可翻。  
+**修复**：改用 `NSScreen.screens.first`（主屏幕）保持一致性。
+
+**原因 B**：`scrollWheel` 监听未区分触控板（`hasPreciseScrollingDeltas=true`，值小）和鼠标（`hasPreciseScrollingDeltas=false`，值为整步），导致阈值判断逻辑对两种设备都不准确。  
+**修复**：用 `event.hasPreciseScrollingDeltas` 分支处理：触控板累积 phase 后以 30pt 阈值判断；鼠标每步 `deltaX` 直接翻页。
+
+**原因 C**：鼠标拖拽翻页的 `DragGesture` 被移除（之前为解决冲突），导致鼠标用户无法拖动翻页。  
+**修复**：在 `pagingView` 上重新加 `DragGesture(minimumDistance:30)`，水平拖动 >50pt 翻页，小幅移动仍触发图标按钮。
