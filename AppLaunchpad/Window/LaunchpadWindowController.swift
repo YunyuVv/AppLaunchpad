@@ -26,30 +26,12 @@ final class LaunchpadWindowController {
         panel.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
 
-        // 本地键盘监听：Escape 关闭
-        if localEventMonitor == nil {
-            localEventMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
-                guard let self else { return event }
-                if event.keyCode == 53 { // Escape
-                    if !viewModel.searchText.isEmpty {
-                        viewModel.searchText = ""
-                    } else {
-                        hide()
-                    }
-                    return nil
-                }
-                return event
-            }
-        }
-
+        setupLocalKeyMonitor()
         viewModel.show()
     }
 
     func hide() {
-        if let monitor = localEventMonitor {
-            NSEvent.removeMonitor(monitor)
-            localEventMonitor = nil
-        }
+        removeLocalKeyMonitor()
         panel?.orderOut(nil)
         viewModel.hide()
         NSApp.setActivationPolicy(.accessory)
@@ -57,11 +39,46 @@ final class LaunchpadWindowController {
 
     // MARK: - Private
 
+    private func setupLocalKeyMonitor() {
+        guard localEventMonitor == nil else { return }
+        localEventMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
+            guard let self else { return event }
+            switch event.keyCode {
+            case 53: // Escape
+                if !viewModel.searchText.isEmpty {
+                    viewModel.searchText = ""
+                } else {
+                    hide()
+                }
+                return nil
+            case 123: // 左方向键
+                if !viewModel.isSearching {
+                    viewModel.goToPreviousPage()
+                    return nil
+                }
+            case 124: // 右方向键
+                if !viewModel.isSearching {
+                    viewModel.goToNextPage()
+                    return nil
+                }
+            default:
+                break
+            }
+            return event
+        }
+    }
+
+    private func removeLocalKeyMonitor() {
+        if let monitor = localEventMonitor {
+            NSEvent.removeMonitor(monitor)
+            localEventMonitor = nil
+        }
+    }
+
     private func makePanel() -> NSPanel {
         let screen = NSScreen.main ?? NSScreen.screens[0]
         let p = NSPanel(
             contentRect: screen.frame,
-            // 移除 .nonactivatingPanel：需要 panel 接收键盘事件，不能阻止激活
             styleMask: [.borderless],
             backing: .buffered,
             defer: false
@@ -74,7 +91,6 @@ final class LaunchpadWindowController {
         p.backgroundColor = .clear
         p.hasShadow = false
 
-        // 传入 dismiss 闭包，SwiftUI 层通过它关闭 panel，不直接操作 viewModel
         let rootView = LaunchpadView(viewModel: viewModel, onDismiss: { [weak self] in
             self?.hide()
         })

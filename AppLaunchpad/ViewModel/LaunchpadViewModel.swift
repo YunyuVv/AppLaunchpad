@@ -52,6 +52,23 @@ final class LaunchpadViewModel {
 
     var isSearching: Bool { !searchText.isEmpty }
 
+    // MARK: - 翻页
+
+    func goToPreviousPage() {
+        guard currentPageIndex > 0 else { return }
+        currentPageIndex -= 1
+    }
+
+    func goToNextPage() {
+        guard currentPageIndex < totalPages - 1 else { return }
+        currentPageIndex += 1
+    }
+
+    func goToPage(_ index: Int) {
+        guard index >= 0, index < totalPages else { return }
+        currentPageIndex = index
+    }
+
     // MARK: - Actions
 
     /// 后台扫描应用并初始化布局
