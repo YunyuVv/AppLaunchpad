@@ -71,8 +71,10 @@ final class LaunchpadWindowController {
         localEventMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
             guard let self else { return event }
             switch event.keyCode {
-            case 53: // Escape
-                if !viewModel.searchText.isEmpty {
+            case 53: // Escape：编辑模式 → 退出编辑；搜索中 → 清空；否则 → 关闭面板
+                if viewModel.isEditMode {
+                    viewModel.exitEditMode()
+                } else if !viewModel.searchText.isEmpty {
                     viewModel.searchText = ""
                 } else {
                     hide()

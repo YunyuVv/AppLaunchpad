@@ -7,7 +7,6 @@ struct LaunchpadView: View {
 
     @State private var appeared = false
     @State private var dragOffsetX: CGFloat = 0
-    // 记录本次拖拽方向，用于视觉反馈
     @State private var isDragging = false
 
     private var pageWidth: CGFloat {
@@ -19,18 +18,21 @@ struct LaunchpadView: View {
 
     var body: some View {
         ZStack {
-            // ── 背景（纯视觉）
-            BackgroundView()
-                .allowsHitTesting(false)
+            BackgroundView().allowsHitTesting(false)
 
-            // ── 交互层：承担全屏 tap 关闭 + 全屏 drag 翻页
-            // simultaneousGesture 使 tap 和 drag 互不干扰
+            // 关闭/退出编辑层
             Color.clear
                 .contentShape(Rectangle())
-                .onTapGesture { onDismiss() }
+                .onTapGesture {
+                    if viewModel.isEditMode {
+                        viewModel.exitEditMode()    // 编辑模式下点空白只退出编辑
+                    } else {
+                        onDismiss()
+                    }
+                }
                 .simultaneousGesture(pagingDragGesture)
 
-            // ── 内容层（最上层，按钮/文本框拦截自身点击）
+            // 内容层
             VStack(spacing: 0) {
                 SearchBarView(text: $viewModel.searchText)
                     .padding(.top, 56)
@@ -52,36 +54,30 @@ struct LaunchpadView: View {
         }
     }
 
-    // MARK: - 全屏拖拽翻页手势
+    // MARK: - 全屏拖拽翻页（非编辑模式）
 
     private var pagingDragGesture: some Gesture {
         DragGesture(minimumDistance: 30)
             .onChanged { value in
-                guard !viewModel.isSearching else { return }
+                guard !viewModel.isSearching, !viewModel.isEditMode else { return }
                 guard abs(value.translation.width) > abs(value.translation.height) else { return }
                 dragOffsetX = value.translation.width
                 isDragging = true
             }
             .onEnded { value in
-                guard !viewModel.isSearching else { return }
+                guard !viewModel.isSearching, !viewModel.isEditMode else { return }
                 isDragging = false
                 let threshold: CGFloat = 50
                 let goNext = value.translation.width < -threshold
                 let goPrev = value.translation.width > threshold
-
-                // 立即归零 offset（不参与动画），让 transition 独立负责滑入/滑出
                 dragOffsetX = 0
-
                 if goNext || goPrev {
                     withAnimation(.spring(duration: 0.3, bounce: 0.1)) {
                         if goNext { viewModel.goToNextPage() }
                         else      { viewModel.goToPreviousPage() }
                     }
                 } else {
-                    // 未达到翻页阈值，弹回原位
-                    withAnimation(.spring(duration: 0.3, bounce: 0.1)) {
-                        dragOffsetX = 0
-                    }
+                    withAnimation(.spring(duration: 0.3, bounce: 0.1)) { dragOffsetX = 0 }
                 }
             }
     }
@@ -95,8 +91,7 @@ struct LaunchpadView: View {
         } else if viewModel.isSearching {
             searchResultsView
         } else {
-            pagingView
-                .clipped()  // 防止 transition 动画溢出到搜索框/页码区域
+            pagingView.clipped()
         }
     }
 
@@ -120,19 +115,23 @@ struct LaunchpadView: View {
             if items.isEmpty {
                 Text("未找到应用").font(.system(size: 18)).foregroundStyle(.white.opacity(0.6))
             } else {
-                GridPageView(items: items, apps: viewModel.allApps, columns: cols,
-                             onTapApp: { viewModel.launch($0) })
+                GridPageView(
+                    items: items, apps: viewModel.allApps, columns: cols,
+                    pageIndex: 0, isEditMode: false, dragState: DragState(),
+                    onTapApp: { viewModel.launch($0) },
+                    onLongPress: {}, onDeleteApp: nil,
+                    onBeginDrag: { _, _ in }, onUpdateDragTarget: { _ in }, onEndDrag: {}
+                )
             }
         }
     }
 
-    /// 多页视图：每次只渲染当前页，用 transition(.move) 模拟滑动
-    /// 避免 HStack+offset+clipped 方案中 LazyVGrid 不渲染裁剪区外内容的问题
     private var pagingView: some View {
         let cols = viewModel.columnCount(for: targetScreen)
-        let pageItems = viewModel.currentPageIndex < viewModel.layout.pages.count
-            ? viewModel.layout.pages[viewModel.currentPageIndex]
-            : []
+        let pageIdx = viewModel.currentPageIndex
+        let pageItems = viewModel.isEditMode
+            ? viewModel.pageItemsWithDrag(pageIndex: pageIdx)
+            : (pageIdx < viewModel.layout.pages.count ? viewModel.layout.pages[pageIdx] : [])
         let insertEdge: Edge = viewModel.pageFlipGoingForward ? .trailing : .leading
         let removeEdge: Edge = viewModel.pageFlipGoingForward ? .leading  : .trailing
 
@@ -140,13 +139,18 @@ struct LaunchpadView: View {
             items: pageItems,
             apps: viewModel.allApps,
             columns: cols,
-            onTapApp: { viewModel.launch($0) }
+            pageIndex: pageIdx,
+            isEditMode: viewModel.isEditMode,
+            dragState: viewModel.dragState,
+            onTapApp: { viewModel.launch($0) },
+            onLongPress: { viewModel.enterEditMode() },
+            onDeleteApp: { _ in /* TODO: MAS 应用卸载 Phase 7 */ },
+            onBeginDrag: { id, slot in viewModel.beginDrag(bundleID: id, pageIndex: pageIdx, slotIndex: slot) },
+            onUpdateDragTarget: { viewModel.updateDragTarget(slotIndex: $0) },
+            onEndDrag: { viewModel.endDrag() }
         )
-        .offset(x: dragOffsetX)          // 拖拽中实时预览偏移
-        .id(viewModel.currentPageIndex)  // 页码变化时强制替换视图
-        .transition(.asymmetric(
-            insertion: .move(edge: insertEdge),
-            removal:   .move(edge: removeEdge)
-        ))
+        .offset(x: dragOffsetX)
+        .id(viewModel.currentPageIndex)
+        .transition(.asymmetric(insertion: .move(edge: insertEdge), removal: .move(edge: removeEdge)))
     }
 }

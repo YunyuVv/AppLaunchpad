@@ -17,10 +17,13 @@ final class LaunchpadViewModel {
     var currentPageIndex: Int = 0
     var searchText: String = ""
     var isEditMode: Bool = false
+    var dragState: DragState = DragState()
+
+    // MARK: - 翻页方向（供视图层 transition 使用）
+    private(set) var pageFlipGoingForward: Bool = true
 
     // MARK: - 计算属性
 
-    /// 根据屏幕宽度动态决定每行列数
     func columnCount(for screen: NSScreen) -> Int {
         switch screen.frame.width {
         case 1440...: return 7
@@ -29,15 +32,12 @@ final class LaunchpadViewModel {
         }
     }
 
-    /// 每页图标容量（固定 5 行）
     var itemsPerPage: Int {
-        // 始终用主屏幕计算，避免焦点在副屏时产生错误列数
         columnCount(for: NSScreen.screens.first ?? NSScreen.screens[0]) * 5
     }
 
     var totalPages: Int { layout.pages.count }
 
-    /// 搜索结果：前缀匹配排在前面，其余按名称排序
     var searchResults: [AppInfo] {
         guard !searchText.isEmpty else { return [] }
         let q = searchText.lowercased()
@@ -54,9 +54,6 @@ final class LaunchpadViewModel {
     var isSearching: Bool { !searchText.isEmpty }
 
     // MARK: - 翻页
-
-    /// 最近一次翻页是否向前（next），用于视图层决定 transition 方向
-    private(set) var pageFlipGoingForward: Bool = true
 
     func goToPreviousPage() {
         guard currentPageIndex > 0 else { return }
@@ -76,29 +73,137 @@ final class LaunchpadViewModel {
         currentPageIndex = index
     }
 
-    // MARK: - Actions
+    // MARK: - 编辑模式
 
-    /// 后台扫描应用并初始化布局
+    func enterEditMode() {
+        isEditMode = true
+    }
+
+    func exitEditMode() {
+        isEditMode = false
+        dragState = DragState()
+    }
+
+    // MARK: - 拖拽排序
+
+    func beginDrag(bundleID: String, pageIndex: Int, slotIndex: Int) {
+        dragState = DragState(
+            isDragging: true,
+            draggedBundleID: bundleID,
+            sourcePageIndex: pageIndex,
+            sourceSlotIndex: slotIndex,
+            targetSlotIndex: slotIndex
+        )
+    }
+
+    func updateDragTarget(slotIndex: Int) {
+        guard dragState.isDragging else { return }
+        dragState.targetSlotIndex = slotIndex
+    }
+
+    func endDrag() {
+        guard dragState.isDragging else { return }
+        let src = dragState.sourceSlotIndex
+        let dst = dragState.targetSlotIndex
+        let page = dragState.sourcePageIndex
+
+        if src != dst, page < layout.pages.count {
+            var items = layout.pages[page]
+            guard src < items.count else { dragState = DragState(); return }
+            let item = items.remove(at: src)
+            let insertAt = min(dst, items.count)
+            items.insert(item, at: insertAt)
+            layout.pages[page] = items
+            saveLayout()
+        }
+        dragState = DragState()
+    }
+
+    /// 拖拽时返回当前页的"视觉排列"（被拖图标插入目标槽位，其余让位）
+    func pageItemsWithDrag(pageIndex: Int) -> [LayoutItem] {
+        guard dragState.isDragging, dragState.sourcePageIndex == pageIndex,
+              pageIndex < layout.pages.count else {
+            return pageIndex < layout.pages.count ? layout.pages[pageIndex] : []
+        }
+        var items = layout.pages[pageIndex]
+        let src = dragState.sourceSlotIndex
+        let dst = dragState.targetSlotIndex
+        guard src < items.count else { return items }
+        let item = items.remove(at: src)
+        items.insert(item, at: min(dst, items.count))
+        return items
+    }
+
+    // MARK: - 应用操作
+
     func loadApps() async {
         let scanned = await AppScanner.shared.scan()
         allApps = scanned
-        layout = LayoutData.initial(from: scanned, itemsPerPage: itemsPerPage)
+
+        if let saved = await LayoutStore.shared.load() {
+            layout = mergeLayout(saved: saved, scanned: scanned)
+        } else {
+            layout = LayoutData.initial(from: scanned, itemsPerPage: itemsPerPage)
+        }
     }
 
-    /// 启动应用，同时关闭启动台
     func launch(_ app: AppInfo) {
+        exitEditMode()
         hide()
         NSWorkspace.shared.open(app.url)
     }
 
-    func show() {
-        isVisible = true
+    func saveLayout() {
+        let current = layout
+        Task.detached { await LayoutStore.shared.save(current) }
     }
+
+    func show() { isVisible = true }
 
     func hide() {
         isVisible = false
         isEditMode = false
+        dragState = DragState()
         searchText = ""
         currentPageIndex = 0
+    }
+
+    // MARK: - Private
+
+    /// 合并已存储布局与最新扫描结果：保留顺序，追加新 App，移除已卸载 App
+    private func mergeLayout(saved: LayoutData, scanned: [AppInfo]) -> LayoutData {
+        let scannedIDs = Set(scanned.map(\.bundleID))
+
+        // 移除已卸载的 app
+        var pages = saved.pages.map { page in
+            page.filter { item in
+                if case .app(let id) = item { return scannedIDs.contains(id) }
+                return true
+            }
+        }.filter { !$0.isEmpty }
+
+        // 找出新增的 app
+        let existingIDs = Set(pages.flatMap { $0 }.compactMap {
+            if case .app(let id) = $0 { return id }
+            return nil
+        })
+        let newItems = scanned
+            .filter { !existingIDs.contains($0.bundleID) }
+            .map { LayoutItem.app(bundleID: $0.bundleID) }
+
+        // 将新 app 追加到末页（满页则新建一页）
+        if !newItems.isEmpty {
+            for item in newItems {
+                if pages.isEmpty {
+                    pages = [[item]]
+                } else if pages[pages.count - 1].count < itemsPerPage {
+                    pages[pages.count - 1].append(item)
+                } else {
+                    pages.append([item])
+                }
+            }
+        }
+
+        return LayoutData(pages: pages.isEmpty ? [newItems] : pages)
     }
 }
