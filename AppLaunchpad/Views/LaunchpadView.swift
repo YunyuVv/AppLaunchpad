@@ -75,6 +75,9 @@ struct LaunchpadView: View {
                 )
                 .transition(.scale(scale: 0.7).combined(with: .opacity))
             }
+
+            // 拖拽浮动图标：跟随鼠标自由移动，不参与命中检测
+            floatingDragIcon
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .scaleEffect(appeared ? 1.0 : 0.92)
@@ -150,7 +153,7 @@ struct LaunchpadView: View {
                     columns: cols, pageIndex: 0, isEditMode: false, dragState: DragState(),
                     onTapApp: { viewModel.launch($0) }, onTapFolder: { _ in },
                     onLongPress: {}, onDeleteApp: nil,
-                    onBeginDrag: { _, _ in }, onUpdateDragTarget: { _ in }, onEndDrag: {},
+                    onBeginDrag: { _, _, _ in }, onUpdateDragTarget: { _, _ in }, onEndDrag: {},
                     onDropOnFolder: nil
                 )
             }
@@ -181,8 +184,8 @@ struct LaunchpadView: View {
             },
             onLongPress: { viewModel.enterEditMode() },
             onDeleteApp: { _ in },
-            onBeginDrag: { id, slot in viewModel.beginDrag(bundleID: id, pageIndex: pageIdx, slotIndex: slot) },
-            onUpdateDragTarget: { viewModel.updateDragTarget(slotIndex: $0) },
+            onBeginDrag: { id, slot, loc in viewModel.beginDrag(bundleID: id, pageIndex: pageIdx, slotIndex: slot, location: loc) },
+            onUpdateDragTarget: { slot, loc in viewModel.updateDragTarget(slotIndex: slot, location: loc) },
             onEndDrag: { viewModel.endDrag() },
             onDropOnFolder: { bundleID, folderID in
                 viewModel.addAppToFolder(bundleID: bundleID, folderID: folderID, pageIndex: pageIdx)
@@ -191,5 +194,30 @@ struct LaunchpadView: View {
         .offset(x: dragOffsetX)
         .id(viewModel.currentPageIndex)
         .transition(.asymmetric(insertion: .move(edge: insertEdge), removal: .move(edge: removeEdge)))
+    }
+
+    // MARK: - 拖拽浮动图标
+
+    /// 跟随鼠标的浮动图标（置于所有内容之上，不拦截事件）
+    @ViewBuilder
+    private var floatingDragIcon: some View {
+        let ds = viewModel.dragState
+        if ds.isDragging,
+           let app = viewModel.allApps.first(where: { $0.bundleID == ds.draggedBundleID }) {
+            AppIconView(
+                app: app,
+                isEditMode: false,   // 浮动图标不显示抖动/删除按钮
+                onTap: {},
+                onLongPress: {},
+                onDelete: nil
+            )
+            .scaleEffect(1.12)
+            .shadow(color: .black.opacity(0.35), radius: 12, x: 0, y: 6)
+            .allowsHitTesting(false)   // 不拦截任何交互
+            // position 以图标中心为锚点，放在鼠标位置
+            .position(ds.dragLocation)
+            .zIndex(999)
+            .transition(.opacity)
+        }
     }
 }

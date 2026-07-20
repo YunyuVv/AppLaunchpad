@@ -86,19 +86,21 @@ final class LaunchpadViewModel {
 
     // MARK: - 拖拽排序
 
-    func beginDrag(bundleID: String, pageIndex: Int, slotIndex: Int) {
+    func beginDrag(bundleID: String, pageIndex: Int, slotIndex: Int, location: CGPoint) {
         dragState = DragState(
             isDragging: true,
             draggedBundleID: bundleID,
             sourcePageIndex: pageIndex,
             sourceSlotIndex: slotIndex,
-            targetSlotIndex: slotIndex
+            targetSlotIndex: slotIndex,
+            dragLocation: location
         )
     }
 
-    func updateDragTarget(slotIndex: Int) {
+    func updateDragTarget(slotIndex: Int, location: CGPoint) {
         guard dragState.isDragging else { return }
         dragState.targetSlotIndex = slotIndex
+        dragState.dragLocation = location
     }
 
     func endDrag() {
