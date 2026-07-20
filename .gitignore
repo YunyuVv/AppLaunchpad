@@ -67,3 +67,7 @@ AuthKey_*.p8
 *.swp
 *.swo
 *~
+
+# ── AI Agent Skills（全局安装，不纳入项目版本控制） ───
+.agents/
+skills-lock.json

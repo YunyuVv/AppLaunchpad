@@ -6,6 +6,7 @@ import SwiftUI
 final class LaunchpadWindowController {
 
     private var panel: NSPanel?
+    private var localEventMonitor: Any?
     private let viewModel: LaunchpadViewModel
 
     var isVisible: Bool { panel?.isVisible ?? false }
@@ -20,22 +21,39 @@ final class LaunchpadWindowController {
         }
         guard let panel else { return }
 
-        // 先更新激活策略，再显示窗口
         NSApp.setActivationPolicy(.regular)
-
-        // orderFrontRegardless 比 makeKeyAndOrderFront 更可靠，不依赖 App 是否已激活
         panel.orderFrontRegardless()
         panel.makeKey()
-
-        // 短暂延迟激活，确保 setActivationPolicy 已生效
         DispatchQueue.main.async {
             NSApp.activate(ignoringOtherApps: true)
+        }
+
+        // 本地键盘监听：Escape 关闭，比 onExitCommand 更可靠
+        if localEventMonitor == nil {
+            localEventMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
+                guard let self else { return event }
+                // keyCode 53 = Escape
+                if event.keyCode == 53 {
+                    if !self.viewModel.searchText.isEmpty {
+                        self.viewModel.searchText = ""
+                    } else {
+                        self.hide()
+                    }
+                    return nil  // 消费该事件，不再传递
+                }
+                return event
+            }
         }
 
         viewModel.show()
     }
 
     func hide() {
+        // 移除本地监听器
+        if let monitor = localEventMonitor {
+            NSEvent.removeMonitor(monitor)
+            localEventMonitor = nil
+        }
         panel?.orderOut(nil)
         viewModel.hide()
         NSApp.setActivationPolicy(.accessory)
@@ -51,7 +69,6 @@ final class LaunchpadWindowController {
             backing: .buffered,
             defer: false
         )
-        // 覆盖在几乎所有窗口之上（低于屏保一级，避免遮挡系统弹窗）
         p.level = NSWindow.Level(rawValue: Int(CGWindowLevelForKey(.screenSaverWindow)) - 1)
         p.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .stationary]
         p.isFloatingPanel = true
@@ -61,14 +78,6 @@ final class LaunchpadWindowController {
         p.hasShadow = false
 
         let rootView = LaunchpadView(viewModel: viewModel)
-            .onExitCommand { [weak self] in
-                guard let self else { return }
-                if !viewModel.searchText.isEmpty {
-                    viewModel.searchText = ""
-                } else {
-                    hide()
-                }
-            }
         p.contentView = NSHostingView(rootView: rootView)
         return p
     }

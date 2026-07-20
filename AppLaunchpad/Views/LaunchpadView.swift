@@ -8,10 +8,8 @@ struct LaunchpadView: View {
 
     var body: some View {
         ZStack {
+            // 背景层：点击空白区域关闭
             BackgroundView()
-
-            // 点击空白区域关闭
-            Color.clear
                 .contentShape(Rectangle())
                 .onTapGesture { viewModel.hide() }
 
@@ -26,6 +24,12 @@ struct LaunchpadView: View {
 
                 Spacer()
                 Spacer().frame(height: 40)  // 页码指示器预留位（Phase 2）
+            }
+            // VStack 自身不拦截点击，空白区域事件穿透到背景层
+            .allowsHitTesting(false)
+            .overlay {
+                // 只有图标区域恢复点击响应
+                currentPageOverlay
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -45,12 +49,24 @@ struct LaunchpadView: View {
         let pageItems: [LayoutItem] = viewModel.currentPageIndex < viewModel.layout.pages.count
             ? viewModel.layout.pages[viewModel.currentPageIndex]
             : []
-
         return GridPageView(
             items: pageItems,
             apps: viewModel.allApps,
             columns: cols,
             onTapApp: { viewModel.launch($0) }
         )
+    }
+
+    /// 在与 VStack 相同位置叠加可交互的图标层
+    private var currentPageOverlay: some View {
+        VStack(spacing: 0) {
+            Spacer().frame(height: 80)
+            if !viewModel.allApps.isEmpty {
+                currentPageView
+                    .allowsHitTesting(true)
+            }
+            Spacer()
+            Spacer().frame(height: 40)
+        }
     }
 }
