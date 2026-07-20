@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// 底部页码圆点指示器
+/// 底部页码圆点指示器，点击区域扩大为 30×30pt
 struct PageIndicatorView: View {
     let totalPages: Int
     let currentPage: Int
@@ -16,6 +16,8 @@ struct PageIndicatorView: View {
                         height: index == currentPage ? 8 : 6
                     )
                     .animation(.easeInOut(duration: 0.2), value: currentPage)
+                    // 扩大点击热区，原圆点只有 6-8pt 难以命中
+                    .contentShape(Circle().size(CGSize(width: 28, height: 28)))
                     .onTapGesture { onTap(index) }
             }
         }

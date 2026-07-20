@@ -24,8 +24,10 @@ struct WobbleModifier: ViewModifier {
 
     private func startWobble() {
         let delay = Double.random(in: 0...0.25)
+        // duration 每次随机，防止多次进出编辑模式后所有图标 duration 趋同而同步
+        let dur = Double.random(in: 0.10...0.14)
         withAnimation(
-            .easeInOut(duration: duration)
+            .easeInOut(duration: dur)
             .repeatForever(autoreverses: true)
             .delay(delay)
         ) { angle = amplitude }

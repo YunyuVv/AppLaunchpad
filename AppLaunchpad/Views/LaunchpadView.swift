@@ -99,9 +99,11 @@ struct LaunchpadView: View {
         .scaleEffect(appeared ? 1.0 : 0.92)
         .opacity(appeared ? 1.0 : 0)
         .animation(.spring(duration: 0.35, bounce: 0.15), value: appeared)
-        .onAppear {
+        // task 在 onAppear 之后、首帧渲染完成后触发，比 asyncAfter(0.01) 更可靠
+        .task {
             appeared = false
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.01) { appeared = true }
+            try? await Task.sleep(nanoseconds: 8_000_000)  // 8ms，一帧后启动弹入动画
+            appeared = true
         }
     }
 

@@ -1,12 +1,12 @@
 import SwiftUI
 
-/// 文件夹展开态：居中弹出，内部图标 4 列，顶部可内联编辑名称
+/// 文件夹展开态：居中弹出，内部图标 4 列，超出时可滚动，顶部可内联编辑名称
 struct FolderExpandedView: View {
     let folder: FolderInfo
     let apps: [AppInfo]
     let isEditMode: Bool
     let onTapApp: (AppInfo) -> Void
-    let onRemoveApp: (String) -> Void   // 从文件夹内移出 app
+    let onRemoveApp: (String) -> Void
     let onRename: (String) -> Void
 
     @State private var isEditingName = false
@@ -18,26 +18,33 @@ struct FolderExpandedView: View {
     }
 
     var body: some View {
-        VStack(spacing: 16) {
+        VStack(spacing: 0) {
             // 文件夹名称（可点击内联编辑）
             nameView
+                .padding(.top, 20)
+                .padding(.bottom, 12)
 
-            // 内部图标网格（4列，可滚动）
+            Divider().opacity(0.3)
+
+            // 内部图标网格（4列，超出时可垂直滚动）
             let cols = Array(repeating: GridItem(.fixed(80), spacing: 20), count: 4)
-            LazyVGrid(columns: cols, spacing: 20) {
-                ForEach(folderApps, id: \.id) { app in
-                    AppIconView(
-                        app: app,
-                        isEditMode: isEditMode,
-                        onTap: { onTapApp(app) },
-                        onLongPress: {},
-                        onDelete: isEditMode ? { onRemoveApp(app.bundleID) } : nil
-                    )
+            ScrollView(.vertical, showsIndicators: false) {
+                LazyVGrid(columns: cols, spacing: 20) {
+                    ForEach(folderApps, id: \.id) { app in
+                        AppIconView(
+                            app: app,
+                            isEditMode: isEditMode,
+                            onTap: { onTapApp(app) },
+                            onLongPress: {},
+                            onDelete: isEditMode ? { onRemoveApp(app.bundleID) } : nil
+                        )
+                    }
                 }
+                .padding(.horizontal, 20)
+                .padding(.vertical, 16)
             }
-            .padding(.horizontal, 20)
+            .frame(maxHeight: 320)  // 约 3 行，超出滚动
         }
-        .padding(28)
         .frame(width: 500)
         .background(
             RoundedRectangle(cornerRadius: 22)
@@ -48,7 +55,6 @@ struct FolderExpandedView: View {
                 )
         )
         .shadow(color: .black.opacity(0.4), radius: 30, x: 0, y: 10)
-        // 阻止点击穿透到背景关闭层
         .contentShape(Rectangle())
         .onTapGesture {}
     }

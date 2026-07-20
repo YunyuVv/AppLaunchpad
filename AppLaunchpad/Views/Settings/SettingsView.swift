@@ -142,6 +142,13 @@ private struct DisplayPane: View {
 // MARK: - 关于
 
 private struct AboutPane: View {
+    private var version: String {
+        Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "0.1.0"
+    }
+    private var build: String {
+        Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "1"
+    }
+
     var body: some View {
         VStack(spacing: 16) {
             Image(systemName: "square.grid.3x3.fill")
@@ -151,7 +158,7 @@ private struct AboutPane: View {
             VStack(spacing: 4) {
                 Text("AppLaunchpad")
                     .font(.title3.bold())
-                Text("版本 0.1.0")
+                Text("版本 \(version) (\(build))")
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
             }

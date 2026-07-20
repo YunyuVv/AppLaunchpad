@@ -7,13 +7,13 @@ import AppKit
 ///   2. 无需屏幕录制权限
 ///   3. 硬件加速，性能优于 CIFilter
 struct BackgroundView: View {
-    // 从 UserPreferences 读取透明度，设置页面修改后实时生效
-    private var overlayOpacity: Double { UserPreferences.shared.backgroundOverlayOpacity }
+    // 用 @State 持有引用，建立对 @Observable UserPreferences 的追踪依赖
+    @State private var prefs = UserPreferences.shared
 
     var body: some View {
         ZStack {
             ScreenBlurView().ignoresSafeArea()
-            Color.black.opacity(overlayOpacity).ignoresSafeArea()
+            Color.black.opacity(prefs.backgroundOverlayOpacity).ignoresSafeArea()
         }
     }
 }
