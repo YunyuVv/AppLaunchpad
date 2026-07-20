@@ -169,3 +169,19 @@ HStack(spacing: 0) {
 ### Bug 12：翻页时图标和文字像分离滑动（视觉乱）
 **原因**：`dragOffsetX` 和 `.transition(.move)` 同在 `withAnimation` 里运行——新页面从 transition 的边缘插入时，同时还有初始的 dragOffset 值在动画归零，两个动画叠加导致图标/文字的起始位置不同步。  
 **修复**：翻页时立即（不加动画）将 `dragOffsetX = 0`，让 `.transition(.move)` 独立负责滑入/滑出动画；`contentArea` 加 `.clipped()` 防止 transition 溢出到搜索框/页码区域；AppIconView 图标加载加淡入过渡（`transition(.opacity)` + `animation(.easeIn)`）避免灰框突变为图标的跳变感。
+
+---
+
+## 待解决 TODO
+
+### TODO-1：触控板两指滑动翻页
+**现象**：两指左右滑动无法触发翻页，鼠标拖拽和键盘方向键均正常。  
+**已尝试方案**：
+1. `DragGesture` → 仅响应鼠标，不响应触控板两指滑动（macOS 触控板两指滑动产生 scrollWheel 而非 drag 事件）
+2. `scrollWheel` debounce timer → phase 检测不稳定
+3. `scrollWheel` phase 累积（.began/.changed/.ended） → 仍无效，可能是 NSApp.presentationOptions 或面板层级影响了 scrollWheel 事件路由
+**待排查方向**：
+- 验证 `NSEvent.addLocalMonitorForEvents(.scrollWheel)` 是否在当前面板层级下能收到事件（加 print 验证）
+- 尝试在 `NSPanel` 的 `NSHostingView` 上用 `NSPanGestureRecognizer` 直接捕获触控板手势
+- 考虑 `NSScrollView` 包装方案
+**预计阶段**：Phase 6 系统深度集成时一并处理
