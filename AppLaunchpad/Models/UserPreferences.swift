@@ -15,6 +15,23 @@ final class UserPreferences: @unchecked Sendable {
         set { defaults.set(newValue, forKey: Keys.backgroundOverlayOpacity) }
     }
 
+    /// 每行图标列数（0 = 根据屏幕宽度自动，3~9 = 手动指定）
+    var columnCountOverride: Int {
+        get { defaults.integer(forKey: Keys.columnCountOverride) }  // 0 = auto
+        set { defaults.set(max(0, newValue), forKey: Keys.columnCountOverride) }
+    }
+
+    /// 图标尺寸 pt（0 = 默认 80pt，范围 56~120）
+    var iconSizeOverride: Double {
+        get { defaults.double(forKey: Keys.iconSizeOverride) }  // 0 = auto
+        set { defaults.set(newValue, forKey: Keys.iconSizeOverride) }
+    }
+
+    /// 实际使用的图标尺寸
+    var effectiveIconSize: CGFloat {
+        iconSizeOverride > 0 ? CGFloat(iconSizeOverride) : 80
+    }
+
     // MARK: - 多显示器
 
     enum MultiMonitorMode: String, CaseIterable {
@@ -42,6 +59,8 @@ final class UserPreferences: @unchecked Sendable {
     private enum Keys {
         static let backgroundOverlayOpacity = "backgroundOverlayOpacity"
         static let multiMonitorMode         = "multiMonitorMode"
+        static let columnCountOverride      = "columnCountOverride"
+        static let iconSizeOverride         = "iconSizeOverride"
     }
 }
 

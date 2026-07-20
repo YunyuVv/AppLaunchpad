@@ -125,7 +125,7 @@ struct LaunchpadView: View {
                 let goPrev = value.translation.width > threshold
                 dragOffsetX = 0
                 if goNext || goPrev {
-                    withAnimation(.spring(duration: 0.3, bounce: 0.1)) {
+                    withAnimation(.spring(duration: 0.38, bounce: 0.18)) {
                         if goNext { viewModel.goToNextPage() }
                         else      { viewModel.goToPreviousPage() }
                     }
@@ -213,7 +213,12 @@ struct LaunchpadView: View {
         )
         .offset(x: dragOffsetX)
         .id(viewModel.currentPageIndex)
-        .transition(.asymmetric(insertion: .move(edge: insertEdge), removal: .move(edge: removeEdge)))
+        // 翻页动画：move（水平滑入/出）+ opacity（淡入/出）
+        // 淡入淡出消除边缘硬切，spring 弹性让滑动有惯性感
+        .transition(.asymmetric(
+            insertion: .move(edge: insertEdge).combined(with: .opacity),
+            removal:   .move(edge: removeEdge).combined(with: .opacity)
+        ))
     }
 
     // MARK: - 拖拽浮动图标

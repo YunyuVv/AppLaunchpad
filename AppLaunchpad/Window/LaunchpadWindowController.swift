@@ -107,13 +107,13 @@ final class LaunchpadWindowController {
                 return nil
             case 123: // ← 方向键：搜索时透传给 TextField
                 if !viewModel.isSearching {
-                    withAnimation(.spring(duration: 0.3, bounce: 0.1)) { viewModel.goToPreviousPage() }
+                    withAnimation(.spring(duration: 0.38, bounce: 0.18)) { viewModel.goToPreviousPage() }
                     return nil
                 }
                 return event
             case 124: // → 方向键：同上
                 if !viewModel.isSearching {
-                    withAnimation(.spring(duration: 0.3, bounce: 0.1)) { viewModel.goToNextPage() }
+                    withAnimation(.spring(duration: 0.38, bounce: 0.18)) { viewModel.goToNextPage() }
                     return nil
                 }
                 return event
@@ -174,12 +174,12 @@ final class LaunchpadWindowController {
         let now = Date()
         guard now.timeIntervalSince(lastPageFlipTime) > 0.3 else { return }
         if deltaX < -80 {
-            withAnimation(.spring(duration: 0.3, bounce: 0.1)) {
+            withAnimation(.spring(duration: 0.38, bounce: 0.18)) {
                 viewModel.goToNextPage()
             }
             lastPageFlipTime = now
         } else if deltaX > 80 {
-            withAnimation(.spring(duration: 0.3, bounce: 0.1)) {
+            withAnimation(.spring(duration: 0.38, bounce: 0.18)) {
                 viewModel.goToPreviousPage()
             }
             lastPageFlipTime = now

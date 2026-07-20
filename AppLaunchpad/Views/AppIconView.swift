@@ -13,12 +13,15 @@ struct AppIconView: View {
     @State private var isHovering: Bool = false
     @State private var isPressed: Bool = false
 
+    private var iconSize: CGFloat { UserPreferences.shared.effectiveIconSize }
+    private var cellWidth: CGFloat { iconSize + 20 }
+
     var body: some View {
         ZStack(alignment: .topLeading) {
             Button(action: { if !isEditMode { onTap() } }) {
                 VStack(spacing: 6) {
                     iconImage
-                        .frame(width: 80, height: 80)
+                        .frame(width: iconSize, height: iconSize)
                         // hover 放大，点击按下缩小，双重反馈更自然
                         .scaleEffect(isPressed ? 0.92 : (isHovering && !isEditMode ? 1.08 : 1.0))
                         .animation(.easeOut(duration: 0.1), value: isPressed)
@@ -31,7 +34,7 @@ struct AppIconView: View {
                         .multilineTextAlignment(.center)
                         .shadow(color: .black.opacity(0.6), radius: 2, x: 0, y: 1)
                 }
-                .frame(width: 100)
+                .frame(width: cellWidth)
                 // 点击按下状态
                 .opacity(isPressed && !isEditMode ? 0.8 : 1.0)
             }

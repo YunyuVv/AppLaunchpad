@@ -30,7 +30,9 @@ final class LaunchpadViewModel {
     // MARK: - 计算属性
 
     func columnCount(for screen: NSScreen) -> Int {
-        switch screen.frame.width {
+        let override = UserPreferences.shared.columnCountOverride
+        if override >= 3 { return override }   // 用户手动指定（3~9）
+        switch screen.frame.width {            // 根据屏幕宽度自动
         case 1440...: return 7
         case 1280 ..< 1440: return 6
         default: return 5

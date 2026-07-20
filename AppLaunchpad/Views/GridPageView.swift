@@ -20,18 +20,24 @@ struct GridPageView: View {
 
     @State private var slotFrames: [Int: CGRect] = [:]
 
+    private var prefs: UserPreferences { UserPreferences.shared }
+    private var iconSize: CGFloat { prefs.effectiveIconSize }
+    private var cellWidth: CGFloat { iconSize + 20 }
+    private var colSpacing: CGFloat { 20 }
+    private var rowSpacing: CGFloat { 30 }
+
     var body: some View {
         let rows = items.chunked(into: columns)
-        return VStack(spacing: 30) {
+        return VStack(spacing: rowSpacing) {
             ForEach(Array(rows.enumerated()), id: \.offset) { rowIdx, rowItems in
-                HStack(spacing: 20) {
+                HStack(spacing: colSpacing) {
                     ForEach(Array(rowItems.enumerated()), id: \.offset) { colIdx, item in
                         let slotIdx = rowIdx * columns + colIdx
                         iconCell(item: item, slotIndex: slotIdx)
                     }
                     if rowItems.count < columns {
                         ForEach(0..<(columns - rowItems.count), id: \.self) { _ in
-                            Color.clear.frame(width: 100)
+                            Color.clear.frame(width: cellWidth)
                         }
                     }
                 }

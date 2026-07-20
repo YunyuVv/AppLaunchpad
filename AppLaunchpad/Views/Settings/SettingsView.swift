@@ -112,6 +112,54 @@ private struct AppearancePane: View {
                         .foregroundStyle(.secondary)
                 }
             }
+
+            Section("图标网格") {
+                // 每行列数
+                VStack(alignment: .leading, spacing: 6) {
+                    HStack {
+                        Text("每行列数")
+                        Spacer()
+                        Text(prefs.columnCountOverride == 0 ? "自动" : "\(prefs.columnCountOverride) 列")
+                            .foregroundStyle(.secondary)
+                            .monospacedDigit()
+                    }
+                    HStack(spacing: 8) {
+                        Text("自动").font(.caption).foregroundStyle(.secondary)
+                        Slider(
+                            value: Binding(
+                                get: { Double(prefs.columnCountOverride == 0 ? 0 : prefs.columnCountOverride) },
+                                set: { prefs.columnCountOverride = $0 < 3 ? 0 : Int($0) }
+                            ),
+                            in: 0...9,
+                            step: 1
+                        )
+                        Text("9 列").font(.caption).foregroundStyle(.secondary)
+                    }
+                    Text("设为 0 时根据屏幕宽度自动决定（推荐）")
+                        .font(.caption).foregroundStyle(.secondary)
+                }
+
+                // 图标尺寸
+                VStack(alignment: .leading, spacing: 6) {
+                    HStack {
+                        Text("图标大小")
+                        Spacer()
+                        Text(prefs.iconSizeOverride == 0 ? "默认 (80pt)" : "\(Int(prefs.iconSizeOverride)) pt")
+                            .foregroundStyle(.secondary)
+                            .monospacedDigit()
+                    }
+                    Slider(
+                        value: Binding(
+                            get: { prefs.iconSizeOverride == 0 ? 80 : prefs.iconSizeOverride },
+                            set: { prefs.iconSizeOverride = abs($0 - 80) < 3 ? 0 : $0 }
+                        ),
+                        in: 56...120,
+                        step: 4
+                    )
+                    Text("拖到 80pt 附近自动吸附到默认值")
+                        .font(.caption).foregroundStyle(.secondary)
+                }
+            }
         }
         .formStyle(.grouped)
         .padding(.vertical, 8)
