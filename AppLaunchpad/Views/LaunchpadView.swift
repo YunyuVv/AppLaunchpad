@@ -7,8 +7,9 @@ struct LaunchpadView: View {
 
     @State private var appeared = false
     @State private var dragOffsetX: CGFloat = 0
+    // 记录本次拖拽方向，用于视觉反馈
+    @State private var isDragging = false
 
-    // 直接从主屏幕取宽度，避免 GeometryReader 在 NSHostingView 中返回错误尺寸
     private var pageWidth: CGFloat {
         NSScreen.screens.first?.frame.width ?? 1440
     }
@@ -22,22 +23,21 @@ struct LaunchpadView: View {
             BackgroundView()
                 .allowsHitTesting(false)
 
-            // ── 关闭层：空白区域点击触发
+            // ── 交互层：承担全屏 tap 关闭 + 全屏 drag 翻页
+            // simultaneousGesture 使 tap 和 drag 互不干扰
             Color.clear
                 .contentShape(Rectangle())
                 .onTapGesture { onDismiss() }
+                .simultaneousGesture(pagingDragGesture)
 
-            // ── 内容层（最上层，自身拦截点击）
+            // ── 内容层（最上层，按钮/文本框拦截自身点击）
             VStack(spacing: 0) {
                 SearchBarView(text: $viewModel.searchText)
                     .padding(.top, 56)
 
                 Spacer()
-
                 contentArea
-
                 Spacer()
-
                 pageIndicatorArea
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -47,12 +47,32 @@ struct LaunchpadView: View {
         .opacity(appeared ? 1.0 : 0)
         .animation(.spring(duration: 0.35, bounce: 0.15), value: appeared)
         .onAppear {
-            // 每次出现都重置动画，确保重复显示时也有动画
             appeared = false
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.01) {
-                appeared = true
-            }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.01) { appeared = true }
         }
+    }
+
+    // MARK: - 全屏拖拽翻页手势
+
+    private var pagingDragGesture: some Gesture {
+        DragGesture(minimumDistance: 30)
+            .onChanged { value in
+                guard !viewModel.isSearching else { return }
+                guard abs(value.translation.width) > abs(value.translation.height) else { return }
+                dragOffsetX = value.translation.width
+                isDragging = true
+            }
+            .onEnded { value in
+                guard !viewModel.isSearching else { return }
+                isDragging = false
+                withAnimation(.spring(duration: 0.3, bounce: 0.1)) { dragOffsetX = 0 }
+                let threshold: CGFloat = 50
+                if value.translation.width < -threshold {
+                    viewModel.goToNextPage()
+                } else if value.translation.width > threshold {
+                    viewModel.goToPreviousPage()
+                }
+            }
     }
 
     // MARK: - Subviews
@@ -60,10 +80,7 @@ struct LaunchpadView: View {
     @ViewBuilder
     private var contentArea: some View {
         if viewModel.allApps.isEmpty {
-            ProgressView()
-                .progressViewStyle(.circular)
-                .scaleEffect(1.5)
-                .tint(.white)
+            ProgressView().progressViewStyle(.circular).scaleEffect(1.5).tint(.white)
         } else if viewModel.isSearching {
             searchResultsView
         } else {
@@ -89,9 +106,7 @@ struct LaunchpadView: View {
         let items = viewModel.searchResults.map { LayoutItem.app(bundleID: $0.bundleID) }
         return Group {
             if items.isEmpty {
-                Text("未找到应用")
-                    .font(.system(size: 18))
-                    .foregroundStyle(.white.opacity(0.6))
+                Text("未找到应用").font(.system(size: 18)).foregroundStyle(.white.opacity(0.6))
             } else {
                 GridPageView(items: items, apps: viewModel.allApps, columns: cols,
                              onTapApp: { viewModel.launch($0) })
@@ -99,7 +114,7 @@ struct LaunchpadView: View {
         }
     }
 
-    /// 多页横向滑动视图，宽度直接用屏幕宽度，不依赖 GeometryReader
+    /// 多页视图：HStack 全量渲染所有页，offset 偏移实现翻页动画
     private var pagingView: some View {
         let cols = viewModel.columnCount(for: targetScreen)
         let w = pageWidth
@@ -116,24 +131,5 @@ struct LaunchpadView: View {
         .offset(x: -CGFloat(viewModel.currentPageIndex) * w + dragOffsetX)
         .animation(.spring(duration: 0.3, bounce: 0.1), value: viewModel.currentPageIndex)
         .animation(.interactiveSpring(response: 0.25), value: dragOffsetX)
-        // 鼠标拖拽翻页（minimumDistance 保证点击图标不误触）
-        .gesture(
-            DragGesture(minimumDistance: 30)
-                .onChanged { value in
-                    guard abs(value.translation.width) > abs(value.translation.height) else { return }
-                    dragOffsetX = value.translation.width
-                }
-                .onEnded { value in
-                    withAnimation(.spring(duration: 0.3, bounce: 0.1)) {
-                        dragOffsetX = 0
-                    }
-                    let threshold: CGFloat = 50
-                    if value.translation.width < -threshold {
-                        viewModel.goToNextPage()
-                    } else if value.translation.width > threshold {
-                        viewModel.goToPreviousPage()
-                    }
-                }
-        )
     }
 }

@@ -97,35 +97,38 @@ final class LaunchpadWindowController {
 
     // MARK: - 触控板 + 鼠标滚轮翻页
 
+    private var scrollDebounceTimer: Timer?
+
     private func setupScrollMonitor() {
         guard scrollMonitor == nil else { return }
         accumulatedScrollX = 0
 
         scrollMonitor = NSEvent.addLocalMonitorForEvents(matching: .scrollWheel) { [weak self] event in
             guard let self, !viewModel.isSearching else { return event }
-            guard abs(event.scrollingDeltaX) > abs(event.scrollingDeltaY) else { return event }
 
-            if event.hasPreciseScrollingDeltas {
-                // ── 触控板：连续精确滚动，phase 累积后判断
-                // 忽略惯性阶段，防止翻多页
-                guard event.momentumPhase == .none else { return event }
-                if event.phase == .began { accumulatedScrollX = 0 }
-                accumulatedScrollX += event.scrollingDeltaX
-                if event.phase == .ended || event.phase == .cancelled {
-                    // 触控板阈值降低到 30pt（原 80pt 太难触发）
-                    if accumulatedScrollX < -30 {
-                        flipPage(deltaX: -100)
-                    } else if accumulatedScrollX > 30 {
-                        flipPage(deltaX: 100)
+            let dx = event.scrollingDeltaX
+            let dy = event.scrollingDeltaY
+
+            // 只处理横向为主的滚动
+            guard abs(dx) > abs(dy), abs(dx) > 0.5 else { return event }
+
+            // 惯性阶段忽略，防止翻多页
+            guard event.momentumPhase == .none else { return event }
+
+            accumulatedScrollX += dx
+
+            // 用 debounce 定时器检测手势结束（不依赖 phase == .ended，更兼容）
+            scrollDebounceTimer?.invalidate()
+            scrollDebounceTimer = Timer.scheduledTimer(withTimeInterval: 0.15, repeats: false) { [weak self] _ in
+                guard let self else { return }
+                Task { @MainActor [weak self] in
+                    guard let self else { return }
+                    if self.accumulatedScrollX < -20 {
+                        self.flipPage(deltaX: -100)
+                    } else if self.accumulatedScrollX > 20 {
+                        self.flipPage(deltaX: 100)
                     }
-                    accumulatedScrollX = 0
-                }
-            } else {
-                // ── 物理鼠标滚轮：离散事件，deltaX 为整数步数
-                if event.deltaX < 0 {
-                    flipPage(deltaX: -100)
-                } else if event.deltaX > 0 {
-                    flipPage(deltaX: 100)
+                    self.accumulatedScrollX = 0
                 }
             }
 
@@ -148,6 +151,8 @@ final class LaunchpadWindowController {
     // MARK: - 清理
 
     private func removeMonitors() {
+        scrollDebounceTimer?.invalidate()
+        scrollDebounceTimer = nil
         [localEventMonitor, scrollMonitor].compactMap { $0 }.forEach {
             NSEvent.removeMonitor($0)
         }
