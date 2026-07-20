@@ -31,7 +31,8 @@ final class LaunchpadViewModel {
 
     /// 每页图标容量（固定 5 行）
     var itemsPerPage: Int {
-        columnCount(for: NSScreen.main ?? NSScreen.screens[0]) * 5
+        // 始终用主屏幕计算，避免焦点在副屏时产生错误列数
+        columnCount(for: NSScreen.screens.first ?? NSScreen.screens[0]) * 5
     }
 
     var totalPages: Int { layout.pages.count }

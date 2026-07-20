@@ -116,5 +116,24 @@ struct LaunchpadView: View {
         .offset(x: -CGFloat(viewModel.currentPageIndex) * w + dragOffsetX)
         .animation(.spring(duration: 0.3, bounce: 0.1), value: viewModel.currentPageIndex)
         .animation(.interactiveSpring(response: 0.25), value: dragOffsetX)
+        // 鼠标拖拽翻页（minimumDistance 保证点击图标不误触）
+        .gesture(
+            DragGesture(minimumDistance: 30)
+                .onChanged { value in
+                    guard abs(value.translation.width) > abs(value.translation.height) else { return }
+                    dragOffsetX = value.translation.width
+                }
+                .onEnded { value in
+                    withAnimation(.spring(duration: 0.3, bounce: 0.1)) {
+                        dragOffsetX = 0
+                    }
+                    let threshold: CGFloat = 50
+                    if value.translation.width < -threshold {
+                        viewModel.goToNextPage()
+                    } else if value.translation.width > threshold {
+                        viewModel.goToPreviousPage()
+                    }
+                }
+        )
     }
 }

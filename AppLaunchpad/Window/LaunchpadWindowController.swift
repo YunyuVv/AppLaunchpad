@@ -105,18 +105,30 @@ final class LaunchpadWindowController {
             guard let self, !viewModel.isSearching else { return event }
             guard abs(event.scrollingDeltaX) > abs(event.scrollingDeltaY) else { return event }
 
-            if event.phase == .none && event.momentumPhase == .none {
-                // 物理鼠标滚轮
-                flipPage(deltaX: event.scrollingDeltaX * 3)
-            } else if event.momentumPhase == .none {
-                // 触控板手势
+            if event.hasPreciseScrollingDeltas {
+                // ── 触控板：连续精确滚动，phase 累积后判断
+                // 忽略惯性阶段，防止翻多页
+                guard event.momentumPhase == .none else { return event }
                 if event.phase == .began { accumulatedScrollX = 0 }
                 accumulatedScrollX += event.scrollingDeltaX
                 if event.phase == .ended || event.phase == .cancelled {
-                    flipPage(deltaX: accumulatedScrollX)
+                    // 触控板阈值降低到 30pt（原 80pt 太难触发）
+                    if accumulatedScrollX < -30 {
+                        flipPage(deltaX: -100)
+                    } else if accumulatedScrollX > 30 {
+                        flipPage(deltaX: 100)
+                    }
                     accumulatedScrollX = 0
                 }
+            } else {
+                // ── 物理鼠标滚轮：离散事件，deltaX 为整数步数
+                if event.deltaX < 0 {
+                    flipPage(deltaX: -100)
+                } else if event.deltaX > 0 {
+                    flipPage(deltaX: 100)
+                }
             }
+
             return event
         }
     }
