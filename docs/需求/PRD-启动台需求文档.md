@@ -1,4 +1,4 @@
-# Launchpad - macOS 启动台需求文档
+# AppLaunchpad - macOS 启动台需求文档
 
 **版本**: v1.0.0  
 **日期**: 2026-07-20  
@@ -350,7 +350,7 @@ macOS 26 系统升级后，系统原生 Launchpad（启动台）功能被移除�
 
 ### 5.1 用户配置存储
 
-存储路径：`~/Library/Preferences/com.yourcompany.Launchpad.plist`
+存储路径：`~/Library/Preferences/com.yourcompany.AppLaunchpad.plist`
 
 | 字段 | 类型 | 说明 |
 |-----|------|------|
