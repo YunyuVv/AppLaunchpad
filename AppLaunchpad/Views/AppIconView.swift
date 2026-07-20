@@ -34,6 +34,8 @@ struct AppIconView: View {
             .onHover { isHovering = $0 }
             .onLongPressGesture(minimumDuration: 0.5) { onLongPress() }
             .wobble(isEditMode)
+            // 编辑模式下禁用 Button 命中检测，让事件穿透到父级 VStack 的 DragGesture
+            .allowsHitTesting(!isEditMode)
             .task(id: app.id) {
                 icon = await IconCache.shared.icon(for: app)
             }

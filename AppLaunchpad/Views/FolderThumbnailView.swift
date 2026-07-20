@@ -53,8 +53,10 @@ struct FolderThumbnailView: View {
                 .shadow(color: .black.opacity(0.6), radius: 2, x: 0, y: 1)
         }
         .frame(width: 100)
-        .onTapGesture { onTap() }
+        .onTapGesture { if !isEditMode { onTap() } }
         .onLongPressGesture(minimumDuration: 0.5) { onLongPress() }
+        // 编辑模式下禁用自身命中检测，让父级 DragGesture 可以拖动文件夹
+        .allowsHitTesting(!isEditMode)
         .task(id: folder.id) {
             for app in gridApps {
                 let icon = await IconCache.shared.icon(for: app)

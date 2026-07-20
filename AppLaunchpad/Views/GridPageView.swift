@@ -39,7 +39,7 @@ struct GridPageView: View {
         }
         .padding(.horizontal, 60)
         .onPreferenceChange(SlotFrameKey.self) { slotFrames = $0 }
-        .gesture(isEditMode ? dragGesture : nil)
+        .gesture(dragGesture, including: isEditMode ? .all : .subviews)
     }
 
     @ViewBuilder
