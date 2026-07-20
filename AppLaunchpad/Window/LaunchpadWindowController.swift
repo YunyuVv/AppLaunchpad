@@ -23,23 +23,20 @@ final class LaunchpadWindowController {
 
         NSApp.setActivationPolicy(.regular)
         panel.orderFrontRegardless()
-        panel.makeKey()
-        DispatchQueue.main.async {
-            NSApp.activate(ignoringOtherApps: true)
-        }
+        panel.makeKeyAndOrderFront(nil)
+        NSApp.activate(ignoringOtherApps: true)
 
-        // 本地键盘监听：Escape 关闭，比 onExitCommand 更可靠
+        // 本地键盘监听：Escape 关闭
         if localEventMonitor == nil {
             localEventMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
                 guard let self else { return event }
-                // keyCode 53 = Escape
-                if event.keyCode == 53 {
-                    if !self.viewModel.searchText.isEmpty {
-                        self.viewModel.searchText = ""
+                if event.keyCode == 53 { // Escape
+                    if !viewModel.searchText.isEmpty {
+                        viewModel.searchText = ""
                     } else {
-                        self.hide()
+                        hide()
                     }
-                    return nil  // 消费该事件，不再传递
+                    return nil
                 }
                 return event
             }
@@ -49,7 +46,6 @@ final class LaunchpadWindowController {
     }
 
     func hide() {
-        // 移除本地监听器
         if let monitor = localEventMonitor {
             NSEvent.removeMonitor(monitor)
             localEventMonitor = nil
@@ -65,7 +61,8 @@ final class LaunchpadWindowController {
         let screen = NSScreen.main ?? NSScreen.screens[0]
         let p = NSPanel(
             contentRect: screen.frame,
-            styleMask: [.borderless, .nonactivatingPanel],
+            // 移除 .nonactivatingPanel：需要 panel 接收键盘事件，不能阻止激活
+            styleMask: [.borderless],
             backing: .buffered,
             defer: false
         )
@@ -77,7 +74,10 @@ final class LaunchpadWindowController {
         p.backgroundColor = .clear
         p.hasShadow = false
 
-        let rootView = LaunchpadView(viewModel: viewModel)
+        // 传入 dismiss 闭包，SwiftUI 层通过它关闭 panel，不直接操作 viewModel
+        let rootView = LaunchpadView(viewModel: viewModel, onDismiss: { [weak self] in
+            self?.hide()
+        })
         p.contentView = NSHostingView(rootView: rootView)
         return p
     }
