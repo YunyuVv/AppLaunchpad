@@ -67,12 +67,18 @@ final class LaunchpadWindowController {
                     hide()
                 }
                 return nil
-            case 123: // ←
-                if !viewModel.isSearching { viewModel.goToPreviousPage() }
-                return nil
-            case 124: // →
-                if !viewModel.isSearching { viewModel.goToNextPage() }
-                return nil
+            case 123: // ←：只在非搜索状态翻页，搜索时透传给 TextField 处理光标
+                if !viewModel.isSearching {
+                    viewModel.goToPreviousPage()
+                    return nil
+                }
+                return event
+            case 124: // →：同上
+                if !viewModel.isSearching {
+                    viewModel.goToNextPage()
+                    return nil
+                }
+                return event
             default:
                 return event
             }

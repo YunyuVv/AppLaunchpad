@@ -31,7 +31,6 @@ struct LaunchpadView: View {
             VStack(spacing: 0) {
                 SearchBarView(text: $viewModel.searchText)
                     .padding(.top, 56)
-                    .onTapGesture {}  // 防止穿透到关闭层
 
                 Spacer()
 
