@@ -161,3 +161,11 @@ HStack(spacing: 0) {
 - 使用 `.transition(.asymmetric(insertion: .move(edge:), removal: .move(edge:)))` 实现左右滑入/滑出动画
 - ViewModel 新增 `pageFlipGoingForward` 记录方向，控制 transition edge
 - 所有翻页调用统一用 `withAnimation` 包裹触发 transition
+
+### Bug 11：触控板两指滑动无法翻页
+**原因**：每个 scrollWheel 事件单独判断 `abs(dx) > abs(dy)`，斜向滑动时大量事件被过滤（dy 较大），累积值永远达不到阈值 20pt。  
+**修复**：改为 `phase(.began/.changed/.ended)` 全程累积 x 和 y，只在 `.ended` 时整体判断方向（总水平分量 > 总垂直分量 && 幅度 > 20pt），不再过滤单个事件。
+
+### Bug 12：翻页时图标和文字像分离滑动（视觉乱）
+**原因**：`dragOffsetX` 和 `.transition(.move)` 同在 `withAnimation` 里运行——新页面从 transition 的边缘插入时，同时还有初始的 dragOffset 值在动画归零，两个动画叠加导致图标/文字的起始位置不同步。  
+**修复**：翻页时立即（不加动画）将 `dragOffsetX = 0`，让 `.transition(.move)` 独立负责滑入/滑出动画；`contentArea` 加 `.clipped()` 防止 transition 溢出到搜索框/页码区域；AppIconView 图标加载加淡入过渡（`transition(.opacity)` + `animation(.easeIn)`）避免灰框突变为图标的跳变感。
