@@ -19,10 +19,19 @@ final class LaunchpadWindowController {
             panel = makePanel()
         }
         guard let panel else { return }
-        // 切换为普通激活策略，使 panel 能接收键盘事件
+
+        // 先更新激活策略，再显示窗口
         NSApp.setActivationPolicy(.regular)
-        NSApp.activate(ignoringOtherApps: true)
-        panel.makeKeyAndOrderFront(nil)
+
+        // orderFrontRegardless 比 makeKeyAndOrderFront 更可靠，不依赖 App 是否已激活
+        panel.orderFrontRegardless()
+        panel.makeKey()
+
+        // 短暂延迟激活，确保 setActivationPolicy 已生效
+        DispatchQueue.main.async {
+            NSApp.activate(ignoringOtherApps: true)
+        }
+
         viewModel.show()
     }
 
@@ -52,14 +61,12 @@ final class LaunchpadWindowController {
         p.hasShadow = false
 
         let rootView = LaunchpadView(viewModel: viewModel)
-            .onExitCommand {
-                // Escape 键：有搜索词则清空，否则关闭
-                Task { @MainActor [weak self] in
-                    if !self!.viewModel.searchText.isEmpty {
-                        self!.viewModel.searchText = ""
-                    } else {
-                        self?.hide()
-                    }
+            .onExitCommand { [weak self] in
+                guard let self else { return }
+                if !viewModel.searchText.isEmpty {
+                    viewModel.searchText = ""
+                } else {
+                    hide()
                 }
             }
         p.contentView = NSHostingView(rootView: rootView)

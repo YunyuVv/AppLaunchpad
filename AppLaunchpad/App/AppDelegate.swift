@@ -1,40 +1,62 @@
 import AppKit
 
-/// 管理 App 生命周期、Dock 图标点击响应，以及全屏窗口的显示/隐藏切换
+/// 管理 App 生命周期、菜单栏图标、全局快捷键入口
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private var windowController: LaunchpadWindowController?
     private var viewModel: LaunchpadViewModel?
 
+    // 菜单栏图标，持有引用防止被释放
+    private var statusItem: NSStatusItem?
+
     func applicationDidFinishLaunching(_ notification: Notification) {
-        // 后台应用模式：不出现在 Cmd+Tab 列表，仅保留 Dock 图标
+        // 后台模式：不在 Cmd+Tab 列表中出现
         NSApp.setActivationPolicy(.accessory)
 
         let vm = LaunchpadViewModel()
         viewModel = vm
         windowController = LaunchpadWindowController(viewModel: vm)
 
+        // 设置菜单栏图标（不需要任何权限，最可靠的触发入口）
+        setupStatusItem()
+
         // 后台异步扫描已安装应用
         Task {
             await vm.loadApps()
         }
 
-        // 临时全局快捷键：Cmd+L 呼出/关闭（Phase 3 替换为 F4）
+        // 全局快捷键（需要辅助功能权限，无权限时静默跳过）
+        setupGlobalHotkey()
+    }
+
+    // MARK: - 菜单栏图标
+
+    private func setupStatusItem() {
+        let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
+        item.button?.image = NSImage(systemSymbolName: "square.grid.3x3.fill", accessibilityDescription: "AppLaunchpad")
+        item.button?.action = #selector(statusItemClicked)
+        item.button?.target = self
+        statusItem = item
+    }
+
+    @objc private func statusItemClicked() {
+        toggle()
+    }
+
+    // MARK: - 全局快捷键
+
+    private func setupGlobalHotkey() {
+        // 若无辅助功能权限，addGlobalMonitorForEvents 静默失效，不影响菜单栏触发
         NSEvent.addGlobalMonitorForEvents(matching: .keyDown) { [weak self] event in
-            // keyCode 37 = L
+            // keyCode 37 = L，仅 Phase 1 测试用，Phase 3 改为 F4
             guard event.modifierFlags.contains(.command), event.keyCode == 37 else { return }
             Task { @MainActor [weak self] in self?.toggle() }
         }
     }
 
-    /// Dock 图标点击或 App 再次激活时，切换启动台显示/隐藏
-    func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows: Bool) -> Bool {
-        toggle()
-        return false
-    }
+    // MARK: - 切换显示
 
-    /// 切换启动台可见状态（供快捷键、Dock 点击共同使用）
     func toggle() {
         guard let wc = windowController else { return }
         if wc.isVisible {
