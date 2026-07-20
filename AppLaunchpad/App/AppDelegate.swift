@@ -1,17 +1,15 @@
 import AppKit
 
-/// 管理 App 生命周期、菜单栏图标、全局快捷键入口
+/// 管理 App 生命周期、菜单栏图标、FSEvents 目录监听
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private var windowController: LaunchpadWindowController?
     private var viewModel: LaunchpadViewModel?
-
-    // 菜单栏图标，持有引用防止被释放
     private var statusItem: NSStatusItem?
+    private var fsWatcher: FSEventsWatcher?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
-        // regular 模式：Dock 图标常驻，用户可从 Dock 点击打开启动台
         NSApp.setActivationPolicy(.regular)
 
         let vm = LaunchpadViewModel()
@@ -22,16 +20,34 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         Task {
             await vm.loadApps()
+            // 首次扫描完成后启动目录监听
+            await startFSWatcher(vm: vm)
         }
         // TODO: Phase 7 设置页面中开放全局快捷键配置（默认 F4，可自定义）
     }
 
+    func applicationWillTerminate(_ notification: Notification) {
+        Task { await fsWatcher?.stop() }
+    }
+
     // MARK: - Dock 图标点击
 
-    /// 点击 Dock 图标时触发（hasVisibleWindows 为 false 时也会调用）
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows: Bool) -> Bool {
         toggle()
         return false
+    }
+
+    // MARK: - FSEvents 目录监听
+
+    private func startFSWatcher(vm: LaunchpadViewModel) async {
+        let watcher = FSEventsWatcher {
+            // 目录变化 → 重新扫描并合并布局（在主线程执行）
+            Task { @MainActor in
+                await vm.refreshApps()
+            }
+        }
+        await watcher.start()
+        self.fsWatcher = watcher
     }
 
     // MARK: - 菜单栏图标
@@ -44,18 +60,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         statusItem = item
     }
 
-    @objc private func statusItemClicked() {
-        toggle()
-    }
+    @objc private func statusItemClicked() { toggle() }
 
     // MARK: - 切换显示
 
     func toggle() {
         guard let wc = windowController else { return }
-        if wc.isVisible {
-            wc.hide()
-        } else {
-            wc.show()
-        }
+        if wc.isVisible { wc.hide() } else { wc.show() }
     }
 }

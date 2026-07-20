@@ -229,6 +229,17 @@ final class LaunchpadViewModel {
         }
     }
 
+    /// FSEvents 触发时调用：重新扫描并合并布局（保留用户排列，追加/移除变化的 App）
+    func refreshApps() async {
+        let scanned = await AppScanner.shared.scan()
+        allApps = scanned
+        layout = mergeLayout(saved: layout, scanned: scanned)
+        // 如果当前页已不存在（如卸载 App 导致页数减少），回到第一页
+        if currentPageIndex >= totalPages {
+            currentPageIndex = max(0, totalPages - 1)
+        }
+    }
+
     func launch(_ app: AppInfo) {
         exitEditMode()
         hide()
