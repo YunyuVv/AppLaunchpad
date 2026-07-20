@@ -55,18 +55,24 @@ final class LaunchpadViewModel {
 
     // MARK: - 翻页
 
+    /// 最近一次翻页是否向前（next），用于视图层决定 transition 方向
+    private(set) var pageFlipGoingForward: Bool = true
+
     func goToPreviousPage() {
         guard currentPageIndex > 0 else { return }
+        pageFlipGoingForward = false
         currentPageIndex -= 1
     }
 
     func goToNextPage() {
         guard currentPageIndex < totalPages - 1 else { return }
+        pageFlipGoingForward = true
         currentPageIndex += 1
     }
 
     func goToPage(_ index: Int) {
         guard index >= 0, index < totalPages else { return }
+        pageFlipGoingForward = index > currentPageIndex
         currentPageIndex = index
     }
 

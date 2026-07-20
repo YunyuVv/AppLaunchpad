@@ -65,12 +65,14 @@ struct LaunchpadView: View {
             .onEnded { value in
                 guard !viewModel.isSearching else { return }
                 isDragging = false
-                withAnimation(.spring(duration: 0.3, bounce: 0.1)) { dragOffsetX = 0 }
                 let threshold: CGFloat = 50
-                if value.translation.width < -threshold {
-                    viewModel.goToNextPage()
-                } else if value.translation.width > threshold {
-                    viewModel.goToPreviousPage()
+                withAnimation(.spring(duration: 0.3, bounce: 0.1)) {
+                    dragOffsetX = 0
+                    if value.translation.width < -threshold {
+                        viewModel.goToNextPage()
+                    } else if value.translation.width > threshold {
+                        viewModel.goToPreviousPage()
+                    }
                 }
             }
     }
@@ -114,22 +116,27 @@ struct LaunchpadView: View {
         }
     }
 
-    /// 多页视图：HStack 全量渲染所有页，offset 偏移实现翻页动画
+    /// 多页视图：每次只渲染当前页，用 transition(.move) 模拟滑动
+    /// 避免 HStack+offset+clipped 方案中 LazyVGrid 不渲染裁剪区外内容的问题
     private var pagingView: some View {
         let cols = viewModel.columnCount(for: targetScreen)
-        let w = pageWidth
-        return HStack(spacing: 0) {
-            ForEach(0..<viewModel.totalPages, id: \.self) { i in
-                let items = i < viewModel.layout.pages.count ? viewModel.layout.pages[i] : []
-                GridPageView(items: items, apps: viewModel.allApps, columns: cols,
-                             onTapApp: { viewModel.launch($0) })
-                    .frame(width: w)
-            }
-        }
-        .frame(width: w, alignment: .leading)
-        .clipped()
-        .offset(x: -CGFloat(viewModel.currentPageIndex) * w + dragOffsetX)
-        .animation(.spring(duration: 0.3, bounce: 0.1), value: viewModel.currentPageIndex)
-        .animation(.interactiveSpring(response: 0.25), value: dragOffsetX)
+        let pageItems = viewModel.currentPageIndex < viewModel.layout.pages.count
+            ? viewModel.layout.pages[viewModel.currentPageIndex]
+            : []
+        let insertEdge: Edge = viewModel.pageFlipGoingForward ? .trailing : .leading
+        let removeEdge: Edge = viewModel.pageFlipGoingForward ? .leading  : .trailing
+
+        return GridPageView(
+            items: pageItems,
+            apps: viewModel.allApps,
+            columns: cols,
+            onTapApp: { viewModel.launch($0) }
+        )
+        .offset(x: dragOffsetX)          // 拖拽中实时预览偏移
+        .id(viewModel.currentPageIndex)  // 页码变化时强制替换视图
+        .transition(.asymmetric(
+            insertion: .move(edge: insertEdge),
+            removal:   .move(edge: removeEdge)
+        ))
     }
 }

@@ -140,10 +140,14 @@ final class LaunchpadWindowController {
         let now = Date()
         guard now.timeIntervalSince(lastPageFlipTime) > 0.3 else { return }
         if deltaX < -80 {
-            viewModel.goToNextPage()
+            withAnimation(.spring(duration: 0.3, bounce: 0.1)) {
+                viewModel.goToNextPage()
+            }
             lastPageFlipTime = now
         } else if deltaX > 80 {
-            viewModel.goToPreviousPage()
+            withAnimation(.spring(duration: 0.3, bounce: 0.1)) {
+                viewModel.goToPreviousPage()
+            }
             lastPageFlipTime = now
         }
     }
