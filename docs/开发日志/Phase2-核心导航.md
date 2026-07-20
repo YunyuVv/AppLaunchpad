@@ -152,3 +152,12 @@ HStack(spacing: 0) {
 
 **原因 C**：鼠标拖拽翻页的 `DragGesture` 被移除（之前为解决冲突），导致鼠标用户无法拖动翻页。  
 **修复**：在 `pagingView` 上重新加 `DragGesture(minimumDistance:30)`，水平拖动 >50pt 翻页，小幅移动仍触发图标按钮。
+
+### Bug 10：第2+页内容为空（HStack+offset+clipped 方案根本缺陷）
+**原因**：在 SwiftUI 中 `.offset()` 只改变视觉渲染位置，不改变 Layout Frame。`.clipped()` 裁剪的是 Layout Frame 的区域。当修饰符顺序为 `.frame(w).clipped().offset(x:)` 时，裁剪区固定在第1页位置，`.offset` 只是把裁剪后的结果移走——第2、3页的内容从未进入裁剪区，用户看到的始终是空白。即使改用非懒加载的 VStack+HStack 行，这个布局问题依然存在。  
+**修复**：放弃 HStack+offset+clipped 方案，改为"单页渲染 + 视图替换动画"：
+- `pagingView` 每次只渲染 `layout.pages[currentPageIndex]` 的内容
+- 使用 `.id(currentPageIndex)` 驱动 SwiftUI 在页码变化时替换视图
+- 使用 `.transition(.asymmetric(insertion: .move(edge:), removal: .move(edge:)))` 实现左右滑入/滑出动画
+- ViewModel 新增 `pageFlipGoingForward` 记录方向，控制 transition edge
+- 所有翻页调用统一用 `withAnimation` 包裹触发 transition
