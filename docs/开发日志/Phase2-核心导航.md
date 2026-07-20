@@ -45,7 +45,7 @@ HStack(spacing: 0) {
 ```
 
 **触发方式**：
-- 触控板双指左右滑动（DragGesture，阈值 60pt）
+- 触控板双指左右滑动（`NSEvent.scrollWheel`，累积 deltaX 超过 80pt 翻页）
 - 键盘左右方向键（LaunchpadWindowController 本地监听，keyCode 123/124）
 - 点击底部页码圆点
 
@@ -95,8 +95,24 @@ HStack(spacing: 0) {
 
 ---
 
-## 五、已知问题 / 遗留事项
+## 五、修复记录
+
+### Bug 1：搜索框无法点击输入
+**原因**：根视图 ZStack 上的 `.onTapGesture { onDismiss() }` 比 TextField 的焦点事件更早触发，每次点击搜索框都会关闭面板。  
+**修复**：将关闭层改为 `Color.clear` 放在 ZStack 中间层，内容 VStack 放在最上层。SwiftUI 命中测试从上到下，TextField/Button 优先消费点击，空白区域穿透到 Color.clear 触发 dismiss。搜索框额外加 `.onTapGesture {}` 吸收点击防止穿透。
+
+### Bug 2：触控板双指滑动无法翻页 / 鼠标点击立即退出
+**原因**：macOS 触控板双指滑动产生 `NSEvent.scrollWheel` 事件，不是 SwiftUI `DragGesture`（DragGesture 对应鼠标拖拽）。SwiftUI `DragGesture` 同时也与根视图 `onTapGesture` 产生冲突，导致轻微移动就触发 dismiss。  
+**修复**：移除 SwiftUI `DragGesture`，改为在 `LaunchpadWindowController` 用 `NSEvent.addLocalMonitorForEvents(.scrollWheel)` 监听横向滚动，累积 `scrollingDeltaX` 超过 80pt 时触发翻页。
+
+### Bug 3：界面显示在副屏幕上
+**原因**：`NSScreen.main` 返回的是当前有键盘焦点的窗口所在屏幕，若用户在副屏操作则返回副屏。  
+**修复**：改用 `NSScreen.screens.first`，这是系统设置中被设为「主显示器」的屏幕（带菜单栏）。`show()` 每次调用时用 `panel.setFrame(primaryScreen.frame)` 更新位置，确保多显示器切换后也能显示在正确位置。
+
+---
+
+## 六、已知问题 / 遗留事项
 
 - 关闭动画暂未实现（面板直接消失，后续迭代优化）
-- 触控板滑动与空白区域点击关闭有手势冲突的边界情况（拖拽距离不足时触发 dismiss），后续设置 `minimumDistance` 规避
+- 主屏幕目前硬编码，Phase 7 设置页面中添加「显示在鼠标所在屏幕」可配置项
 - F4 全局快捷键和 Dock 图标集成在 Phase 3 实现
