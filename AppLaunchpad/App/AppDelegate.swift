@@ -23,8 +23,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         Task {
             await vm.loadApps()
         }
-
-        setupGlobalHotkey()
+        // TODO: Phase 7 设置页面中开放全局快捷键配置（默认 F4，可自定义）
     }
 
     // MARK: - Dock 图标点击
@@ -47,17 +46,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     @objc private func statusItemClicked() {
         toggle()
-    }
-
-    // MARK: - 全局快捷键
-
-    private func setupGlobalHotkey() {
-        // 若无辅助功能权限，addGlobalMonitorForEvents 静默失效，不影响菜单栏触发
-        NSEvent.addGlobalMonitorForEvents(matching: .keyDown) { [weak self] event in
-            // keyCode 37 = L，仅 Phase 1 测试用，Phase 3 改为 F4
-            guard event.modifierFlags.contains(.command), event.keyCode == 37 else { return }
-            Task { @MainActor [weak self] in self?.toggle() }
-        }
     }
 
     // MARK: - 切换显示
