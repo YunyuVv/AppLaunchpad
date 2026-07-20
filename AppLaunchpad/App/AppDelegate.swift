@@ -55,16 +55,30 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func setupStatusItem() {
         let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
         item.button?.image = NSImage(systemSymbolName: "square.grid.3x3.fill", accessibilityDescription: "AppLaunchpad")
-        item.button?.action = #selector(statusItemClicked)
-        item.button?.target = self
+
+        // 左键点击打开菜单，不再直接 toggle
+        let menu = NSMenu()
+        menu.addItem(withTitle: "打开启动台", action: #selector(toggle), keyEquivalent: "")
+            .target = self
+        menu.addItem(.separator())
+        menu.addItem(withTitle: "设置...", action: #selector(openSettings), keyEquivalent: ",")
+            .target = self
+        menu.addItem(.separator())
+        menu.addItem(withTitle: "退出 AppLaunchpad", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
+
+        item.menu = menu
         statusItem = item
     }
 
-    @objc private func statusItemClicked() { toggle() }
+    @objc private func openSettings() {
+        // 激活 App 并打开系统设置窗口（SwiftUI Settings scene）
+        NSApp.activate(ignoringOtherApps: true)
+        NSApp.sendAction(Selector(("showSettingsWindow:")), to: nil, from: nil)
+    }
 
     // MARK: - 切换显示
 
-    func toggle() {
+    @objc func toggle() {
         guard let wc = windowController else { return }
         if wc.isVisible { wc.hide() } else { wc.show() }
     }
