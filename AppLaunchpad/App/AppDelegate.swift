@@ -48,7 +48,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
 
-        // 如果面板正在显示，临时降低面板层级让设置窗口浮在上方
+        // 先清除全屏展示选项（hideDock/autoHideMenuBar 会阻止普通窗口浮现）
+        NSApp.presentationOptions = []
+
+        // 把面板层级降到 normal，让设置窗口可以浮在它上面
         windowController?.lowerPanelForSettings()
 
         let controller = NSHostingController(rootView: SettingsView())
@@ -58,15 +61,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         window.setContentSize(NSSize(width: 420, height: 300))
         window.center()
         window.isReleasedWhenClosed = false
+        // 显式设置 .floating 层级（3），高于降低后的面板（0），确保浮在上方
+        window.level = .floating
         settingsWindow = window
 
-        // 窗口关闭时恢复面板层级
+        // 窗口关闭时恢复面板层级和展示选项
         NotificationCenter.default.addObserver(
             forName: NSWindow.willCloseNotification,
             object: window,
             queue: .main
         ) { [weak self] _ in
             self?.windowController?.restorePanelLevel()
+            // 如果面板还在显示，重新隐藏 Dock/菜单栏
+            if self?.windowController?.isVisible == true {
+                NSApp.presentationOptions = [.hideDock, .autoHideMenuBar]
+            }
         }
 
         NSApp.setActivationPolicy(.regular)
