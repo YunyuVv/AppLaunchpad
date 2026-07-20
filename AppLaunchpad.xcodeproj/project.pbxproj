@@ -7,6 +7,8 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		2A34A0F611588FDA089AB033 /* LayoutData.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9BA6BC8E074B251A875E3599 /* LayoutData.swift */; };
+		5FE9A826CEF11612C87B15A3 /* AppInfo.swift in Sources */ = {isa = PBXBuildFile; fileRef = 391A0D59F67B9A8DED268F55 /* AppInfo.swift */; };
 		A36A6D9E58E93500498FEAD6 /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2481B06DA5521D3CE3F58222 /* AppDelegate.swift */; };
 		E46A0A5C160467A0C14E5B04 /* AppLaunchpadApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0915EDF9A5283181DB0CF3DB /* AppLaunchpadApp.swift */; };
 /* End PBXBuildFile section */
@@ -14,9 +16,11 @@
 /* Begin PBXFileReference section */
 		0915EDF9A5283181DB0CF3DB /* AppLaunchpadApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppLaunchpadApp.swift; sourceTree = "<group>"; };
 		2481B06DA5521D3CE3F58222 /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppDelegate.swift; sourceTree = "<group>"; };
+		391A0D59F67B9A8DED268F55 /* AppInfo.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppInfo.swift; sourceTree = "<group>"; };
 		4E5468B5E7544D5B8745AA7D /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		59C1E1B7C3ACC4BA22DFCBB0 /* AppLaunchpad.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = AppLaunchpad.entitlements; sourceTree = "<group>"; };
 		99EF354D7141BB013C65719A /* AppLaunchpad.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = AppLaunchpad.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		9BA6BC8E074B251A875E3599 /* LayoutData.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LayoutData.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXGroup section */
@@ -45,10 +49,20 @@
 			);
 			sourceTree = "<group>";
 		};
+		F0595DAC755509464754CA10 /* Models */ = {
+			isa = PBXGroup;
+			children = (
+				391A0D59F67B9A8DED268F55 /* AppInfo.swift */,
+				9BA6BC8E074B251A875E3599 /* LayoutData.swift */,
+			);
+			path = Models;
+			sourceTree = "<group>";
+		};
 		F4AD290FC3C857C0577DD874 /* AppLaunchpad */ = {
 			isa = PBXGroup;
 			children = (
 				AC64924C0C060EDE2C7DB0B9 /* App */,
+				F0595DAC755509464754CA10 /* Models */,
 				59C1E1B7C3ACC4BA22DFCBB0 /* AppLaunchpad.entitlements */,
 				4E5468B5E7544D5B8745AA7D /* Info.plist */,
 			);
@@ -114,7 +128,9 @@
 			buildActionMask = 2147483647;
 			files = (
 				A36A6D9E58E93500498FEAD6 /* AppDelegate.swift in Sources */,
+				5FE9A826CEF11612C87B15A3 /* AppInfo.swift in Sources */,
 				E46A0A5C160467A0C14E5B04 /* AppLaunchpadApp.swift in Sources */,
+				2A34A0F611588FDA089AB033 /* LayoutData.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
