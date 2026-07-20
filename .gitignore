@@ -70,4 +70,5 @@ AuthKey_*.p8
 
 # ── AI Agent Skills（全局安装，不纳入项目版本控制） ───
 .agents/
+.claude/skills/
 skills-lock.json
