@@ -40,7 +40,6 @@ final class LaunchpadWindowController {
 
         // 呼出时隐藏 Dock + 菜单栏，与原生 Launchpad 一致
         NSApp.presentationOptions = [.hideDock, .autoHideMenuBar]
-        NSApp.setActivationPolicy(.regular)
         panel.orderFrontRegardless()
         panel.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
@@ -56,7 +55,6 @@ final class LaunchpadWindowController {
         viewModel.hide()
         // 恢复 Dock + 菜单栏
         NSApp.presentationOptions = []
-        NSApp.setActivationPolicy(.accessory)
     }
 
     // MARK: - 主屏幕

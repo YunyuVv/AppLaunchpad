@@ -11,23 +11,28 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var statusItem: NSStatusItem?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
-        // 后台模式：不在 Cmd+Tab 列表中出现
-        NSApp.setActivationPolicy(.accessory)
+        // regular 模式：Dock 图标常驻，用户可从 Dock 点击打开启动台
+        NSApp.setActivationPolicy(.regular)
 
         let vm = LaunchpadViewModel()
         viewModel = vm
         windowController = LaunchpadWindowController(viewModel: vm)
 
-        // 设置菜单栏图标（不需要任何权限，最可靠的触发入口）
         setupStatusItem()
 
-        // 后台异步扫描已安装应用
         Task {
             await vm.loadApps()
         }
 
-        // 全局快捷键（需要辅助功能权限，无权限时静默跳过）
         setupGlobalHotkey()
+    }
+
+    // MARK: - Dock 图标点击
+
+    /// 点击 Dock 图标时触发（hasVisibleWindows 为 false 时也会调用）
+    func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows: Bool) -> Bool {
+        toggle()
+        return false
     }
 
     // MARK: - 菜单栏图标
