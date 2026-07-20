@@ -204,6 +204,77 @@ final class LaunchpadViewModel {
             }
         }
 
-        return LayoutData(pages: pages.isEmpty ? [newItems] : pages)
+        return LayoutData(pages: pages.isEmpty ? [newItems] : pages, folders: saved.folders)
+    }
+}
+
+// MARK: - 文件夹操作
+
+extension LaunchpadViewModel {
+
+    /// 把两个 app 合并创建文件夹（拖拽 sourceID 到 targetID 上触发）
+    func createFolder(sourceID: String, targetID: String, pageIndex: Int) {
+        guard pageIndex < layout.pages.count else { return }
+        var page = layout.pages[pageIndex]
+        guard let srcIdx = page.firstIndex(of: .app(bundleID: sourceID)),
+              let dstIdx = page.firstIndex(of: .app(bundleID: targetID)) else { return }
+
+        let folder = FolderInfo(appIDs: [targetID, sourceID])
+        layout.folders[folder.id] = folder
+
+        let minIdx = min(srcIdx, dstIdx)
+        let maxIdx = max(srcIdx, dstIdx)
+        page.remove(at: maxIdx)
+        page.remove(at: minIdx)
+        page.insert(.folder(id: folder.id), at: minIdx)
+        layout.pages[pageIndex] = page
+        saveLayout()
+    }
+
+    /// 把 app 拖入已有文件夹
+    func addAppToFolder(bundleID: String, folderID: UUID, pageIndex: Int) {
+        guard pageIndex < layout.pages.count,
+              layout.folders[folderID] != nil else { return }
+        layout.pages[pageIndex].removeAll { $0 == .app(bundleID: bundleID) }
+        layout.folders[folderID]?.appIDs.append(bundleID)
+        saveLayout()
+    }
+
+    /// 从文件夹内移出 app，文件夹只剩1个 app 时自动解散
+    func removeAppFromFolder(bundleID: String, folderID: UUID, pageIndex: Int) {
+        guard layout.folders[folderID] != nil else { return }
+        layout.folders[folderID]?.appIDs.removeAll { $0 == bundleID }
+
+        if let folder = layout.folders[folderID], folder.appIDs.count <= 1 {
+            dissolveFolder(folderID: folderID, pageIndex: pageIndex)
+        } else {
+            if pageIndex < layout.pages.count {
+                layout.pages[pageIndex].append(.app(bundleID: bundleID))
+            }
+        }
+        saveLayout()
+    }
+
+    /// 解散文件夹，把内部 app 放回网格
+    func dissolveFolder(folderID: UUID, pageIndex: Int) {
+        guard let folder = layout.folders[folderID],
+              pageIndex < layout.pages.count else { return }
+        var page = layout.pages[pageIndex]
+        if let folderIdx = page.firstIndex(of: .folder(id: folderID)) {
+            page.remove(at: folderIdx)
+            let apps = folder.appIDs.map { LayoutItem.app(bundleID: $0) }
+            page.insert(contentsOf: apps, at: min(folderIdx, page.count))
+        }
+        layout.pages[pageIndex] = page
+        layout.folders.removeValue(forKey: folderID)
+        saveLayout()
+    }
+
+    /// 重命名文件夹
+    func renameFolder(id: UUID, newName: String) {
+        let name = newName.trimmingCharacters(in: .whitespacesAndNewlines)
+        layout.folders[id]?.name = name.isEmpty ? "文件夹" : name
+        layout.folders[id]?.isUserNamed = !name.isEmpty
+        saveLayout()
     }
 }
