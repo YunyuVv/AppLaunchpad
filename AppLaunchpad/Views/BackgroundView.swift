@@ -7,16 +7,13 @@ import AppKit
 ///   2. 无需屏幕录制权限
 ///   3. 硬件加速，性能优于 CIFilter
 struct BackgroundView: View {
+    // 从 UserPreferences 读取透明度，设置页面修改后实时生效
+    private var overlayOpacity: Double { UserPreferences.shared.backgroundOverlayOpacity }
+
     var body: some View {
         ZStack {
-            // 系统级实时模糊：自动合成窗口后方的当前画面
-            ScreenBlurView()
-                .ignoresSafeArea()
-
-            // 深色半透明遮罩，提升图标和文字的可读性
-            // TODO: Phase 7 设置页面中开放透明度配置（当前固定 0.45）
-            Color.black.opacity(0.45)
-                .ignoresSafeArea()
+            ScreenBlurView().ignoresSafeArea()
+            Color.black.opacity(overlayOpacity).ignoresSafeArea()
         }
     }
 }

@@ -61,7 +61,15 @@ final class LaunchpadWindowController {
     // MARK: - 主屏幕
 
     private var primaryScreen: NSScreen {
-        NSScreen.screens.first ?? NSScreen.screens[0]
+        switch UserPreferences.shared.multiMonitorMode {
+        case .primaryScreen:
+            return NSScreen.screens.first ?? NSScreen.screens[0]
+        case .mouseScreen:
+            let mouse = NSEvent.mouseLocation
+            return NSScreen.screens.first { $0.frame.contains(mouse) }
+                ?? NSScreen.screens.first
+                ?? NSScreen.screens[0]
+        }
     }
 
     // MARK: - 键盘监听

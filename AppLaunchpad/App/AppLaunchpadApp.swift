@@ -7,7 +7,9 @@ struct AppLaunchpadApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
 
     var body: some Scene {
-        // 不使用 WindowGroup，窗口完全由 AppDelegate/LaunchpadWindowController 管理
-        Settings { EmptyView() }
+        // Cmd+, 打开设置页面
+        Settings {
+            SettingsView()
+        }
     }
 }
