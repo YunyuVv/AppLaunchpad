@@ -93,15 +93,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let menu = NSMenu()
         menu.addItem(withTitle: "打开启动台", action: #selector(toggle), keyEquivalent: "").target = self
         menu.addItem(.separator())
-        menu.addItem(withTitle: "设置...", action: #selector(openSettingsAction), keyEquivalent: ",").target = self
-        menu.addItem(.separator())
         menu.addItem(withTitle: "退出 AppLaunchpad", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
 
         item.menu = menu
         statusItem = item
     }
-
-    @objc private func openSettingsAction() { showSettings() }
 
     // MARK: - 切换显示
 
