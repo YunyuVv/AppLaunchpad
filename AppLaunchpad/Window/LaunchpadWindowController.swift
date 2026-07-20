@@ -57,42 +57,22 @@ final class LaunchpadWindowController {
         NSApp.presentationOptions = []
     }
 
-    /// 在面板上方打开设置窗口（不关闭面板）
-    /// 原理：临时把面板 level 降到 .normal，让普通的设置窗口浮在上方
-    func openSettings() {
-        guard let panel else {
-            // 面板未显示时直接打开设置
-            activateAndShowSettings()
-            return
-        }
+    private let highLevel = NSWindow.Level(rawValue: Int(CGWindowLevelForKey(.screenSaverWindow)) - 1)
 
-        let normalLevel = NSWindow.Level(rawValue: Int(CGWindowLevelForKey(.normalWindow)))
-        panel.level = normalLevel
-
-        activateAndShowSettings()
-
-        // 监听任意非面板窗口关闭 → 恢复面板 level
-        let highLevel = NSWindow.Level(rawValue: Int(CGWindowLevelForKey(.screenSaverWindow)) - 1)
-        NotificationCenter.default.addObserver(
-            forName: NSWindow.willCloseNotification,
-            object: nil,
-            queue: .main
-        ) { [weak self, weak panel] notification in
-            guard let closingWindow = notification.object as? NSWindow,
-                  closingWindow !== panel else { return }
-            panel?.level = highLevel
-            if let self {
-                NotificationCenter.default.removeObserver(
-                    self, name: NSWindow.willCloseNotification, object: nil
-                )
-            }
-        }
+    /// 打开设置前降低面板层级，让设置窗口浮在上方
+    func lowerPanelForSettings() {
+        panel?.level = NSWindow.Level(rawValue: Int(CGWindowLevelForKey(.normalWindow)))
     }
 
-    private func activateAndShowSettings() {
-        NSApp.setActivationPolicy(.regular)
-        NSApp.activate(ignoringOtherApps: true)
-        NSApp.sendAction(Selector(("showSettingsWindow:")), to: nil, from: nil)
+    /// 设置窗口关闭后恢复面板层级
+    func restorePanelLevel() {
+        panel?.level = highLevel
+    }
+
+    // 供 LaunchpadView 右键菜单调用（转发到 AppDelegate）
+    func openSettings() {
+        // 直接通过 AppDelegate 打开，确保走统一入口
+        (NSApp.delegate as? AppDelegate)?.showSettings()
     }
 
     // MARK: - 主屏幕
