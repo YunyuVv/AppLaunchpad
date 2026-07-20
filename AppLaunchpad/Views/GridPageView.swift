@@ -1,11 +1,12 @@
 import SwiftUI
 
-/// 单页图标网格，支持编辑模式、拖拽排序（浮动图标由 LaunchpadView 渲染）、文件夹缩略图
+/// 单页图标网格，支持编辑模式、拖拽排序、文件夹缩略图
 struct GridPageView: View {
     let items: [LayoutItem]
     let apps: [AppInfo]
     let folders: [UUID: FolderInfo]
     let columns: Int
+    let iconSize: CGFloat          // 由 LaunchpadView 计算后传入，不在此处观察 UserPreferences
     let pageIndex: Int
     let isEditMode: Bool
     let dragState: DragState
@@ -20,11 +21,9 @@ struct GridPageView: View {
 
     @State private var slotFrames: [Int: CGRect] = [:]
 
-    private var prefs: UserPreferences { UserPreferences.shared }
-    private var iconSize: CGFloat { prefs.effectiveIconSize }
     private var cellWidth: CGFloat { iconSize + 20 }
     private var colSpacing: CGFloat { 20 }
-    private var rowSpacing: CGFloat { 30 }
+    private var rowSpacing: CGFloat { 28 }
 
     var body: some View {
         let rows = items.chunked(into: columns)
@@ -43,8 +42,10 @@ struct GridPageView: View {
                 }
             }
         }
-        .padding(.horizontal, 60)
-        .onPreferenceChange(SlotFrameKey.self) { slotFrames = $0 }
+        .onPreferenceChange(SlotFrameKey.self) { newFrames in
+            // 仅在帧真正变化时更新，防止 preference → state → render 循环
+            if newFrames != slotFrames { slotFrames = newFrames }
+        }
     }
 
     // MARK: - 图标格
@@ -60,6 +61,7 @@ struct GridPageView: View {
 
                     AppIconView(
                         app: app,
+                        iconSize: iconSize,
                         isEditMode: isEditMode,
                         onTap: { onTapApp(app) },
                         onLongPress: onLongPress,
@@ -68,47 +70,44 @@ struct GridPageView: View {
                     .opacity(isDragged ? 0.2 : 1.0)
                     .scaleEffect(isFolderTarget ? 1.12 : 1.0)
                     .overlay(
-                        RoundedRectangle(cornerRadius: 22)
+                        RoundedRectangle(cornerRadius: iconSize * 0.22)
                             .strokeBorder(Color.white.opacity(isFolderTarget ? 0.85 : 0), lineWidth: 2)
-                            .frame(width: 88, height: 88)
+                            .frame(width: iconSize + 8, height: iconSize + 8)
                             .allowsHitTesting(false)
                     )
                     .animation(.spring(duration: 0.25), value: isFolderTarget)
                 } else {
-                    Color.clear.frame(width: 100)
+                    Color.clear.frame(width: cellWidth)
                 }
 
             case .folder(let id):
                 if let folder = folders[id] {
                     FolderThumbnailView(
                         folder: folder, apps: apps,
+                        iconSize: iconSize,
                         isEditMode: isEditMode,
                         onTap: { onTapFolder(folder) },
                         onLongPress: onLongPress
                     )
                 } else {
-                    Color.clear.frame(width: 100)
+                    Color.clear.frame(width: cellWidth)
                 }
             }
 
-            // 编辑模式：透明覆盖层捕获拖拽事件
             if isEditMode {
                 Color.clear
                     .contentShape(Rectangle())
-                    .frame(width: 100, height: 130)
+                    .frame(width: cellWidth, height: iconSize + 30)
                     .gesture(cellDragGesture(item: item, slotIndex: slotIndex))
             }
         }
         .background(slotFrameTracker(slotIndex: slotIndex))
     }
 
-    // MARK: - 拖拽手势
+    // MARK: - 拖拽
 
     private func cellDragGesture(item: LayoutItem, slotIndex: Int) -> some Gesture {
-        // 用局部 var 追踪是否已初始化拖拽
-        // 不能依赖 dragState.isDragging：闭包捕获的是拖拽开始时的旧 struct，该值永远为 false
         var hasBegunDrag = false
-
         return DragGesture(minimumDistance: 5, coordinateSpace: .global)
             .onChanged { value in
                 if !hasBegunDrag {
@@ -122,7 +121,6 @@ struct GridPageView: View {
                 }
             }
             .onEnded { value in
-                // 检查是否拖到了已有文件夹上
                 if let targetSlot = nearestSlot(to: value.location),
                    targetSlot < items.count,
                    case .folder(let fid) = items[targetSlot],
@@ -133,8 +131,6 @@ struct GridPageView: View {
                 }
             }
     }
-
-    // MARK: - 辅助
 
     private func slotFrameTracker(slotIndex: Int) -> some View {
         GeometryReader { geo in

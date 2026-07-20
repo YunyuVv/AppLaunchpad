@@ -33,6 +33,7 @@ struct FolderExpandedView: View {
                     ForEach(folderApps, id: \.id) { app in
                         AppIconView(
                             app: app,
+                            iconSize: 72,   // 文件夹内图标固定稍小，保持4列整洁
                             isEditMode: isEditMode,
                             onTap: { onTapApp(app) },
                             onLongPress: {},

@@ -4,6 +4,7 @@ import AppKit
 /// 单个应用图标：图标图片 + 应用名称，支持 hover/编辑模式/拖拽
 struct AppIconView: View {
     let app: AppInfo
+    let iconSize: CGFloat        // 由父级传入，不在此处观察 UserPreferences（避免36个视图同时触发重渲染）
     let isEditMode: Bool
     let onTap: () -> Void
     let onLongPress: () -> Void
@@ -13,7 +14,6 @@ struct AppIconView: View {
     @State private var isHovering: Bool = false
     @State private var isPressed: Bool = false
 
-    private var iconSize: CGFloat { UserPreferences.shared.effectiveIconSize }
     private var cellWidth: CGFloat { iconSize + 20 }
 
     var body: some View {
@@ -22,20 +22,18 @@ struct AppIconView: View {
                 VStack(spacing: 6) {
                     iconImage
                         .frame(width: iconSize, height: iconSize)
-                        // hover 放大，点击按下缩小，双重反馈更自然
                         .scaleEffect(isPressed ? 0.92 : (isHovering && !isEditMode ? 1.08 : 1.0))
                         .animation(.easeOut(duration: 0.1), value: isPressed)
                         .animation(.easeOut(duration: 0.12), value: isHovering)
 
                     Text(app.displayName)
-                        .font(.system(size: 12))
+                        .font(.system(size: max(10, iconSize * 0.14)))  // 字体随图标比例缩放
                         .foregroundStyle(.white)
                         .lineLimit(2)
                         .multilineTextAlignment(.center)
                         .shadow(color: .black.opacity(0.6), radius: 2, x: 0, y: 1)
                 }
                 .frame(width: cellWidth)
-                // 点击按下状态
                 .opacity(isPressed && !isEditMode ? 0.8 : 1.0)
             }
             .buttonStyle(.plain)
@@ -57,7 +55,7 @@ struct AppIconView: View {
                 Button(action: onDelete) {
                     Image(systemName: "xmark.circle.fill")
                         .foregroundStyle(.white, .black.opacity(0.7))
-                        .font(.system(size: 20))
+                        .font(.system(size: max(16, iconSize * 0.22)))
                 }
                 .buttonStyle(.plain)
                 .offset(x: -4, y: -4)
@@ -76,11 +74,10 @@ struct AppIconView: View {
                 .antialiased(true)
                 .transition(.opacity)
         } else {
-            // 占位：更柔和的灰色，避免纯白闪烁感
-            RoundedRectangle(cornerRadius: 16)
+            RoundedRectangle(cornerRadius: iconSize * 0.2)
                 .fill(Color.white.opacity(0.08))
                 .overlay(
-                    RoundedRectangle(cornerRadius: 16)
+                    RoundedRectangle(cornerRadius: iconSize * 0.2)
                         .strokeBorder(Color.white.opacity(0.1), lineWidth: 0.5)
                 )
                 .transition(.opacity)

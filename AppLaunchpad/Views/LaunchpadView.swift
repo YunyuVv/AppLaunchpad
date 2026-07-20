@@ -10,10 +10,23 @@ struct LaunchpadView: View {
     @State private var dragOffsetX: CGFloat = 0
     @State private var isDragging = false
     @State private var expandedFolder: FolderInfo? = nil
-    @State private var showSettingsOverlay = false   // 面板内设置浮层
+    @State private var showSettingsOverlay = false
+    // 从 UserPreferences 读取（只在 LaunchpadView 观察，子视图通过参数接收）
+    @State private var prefs = UserPreferences.shared
 
     private var pageWidth: CGFloat { NSScreen.screens.first?.frame.width ?? 1440 }
     private var targetScreen: NSScreen { NSScreen.screens.first ?? NSScreen.screens[0] }
+
+    /// 图标尺寸：自动填满屏幕宽度（上限 120pt），用户可在设置中手动覆盖
+    private var effectiveIconSize: CGFloat {
+        if prefs.iconSizeOverride > 0 { return CGFloat(prefs.iconSizeOverride) }
+        let cols = CGFloat(viewModel.columnCount(for: targetScreen))
+        let sidePad: CGFloat = 60
+        let spacing: CGFloat = 20
+        let available = pageWidth - 2 * sidePad - spacing * (cols - 1)
+        let cellWidth = available / cols
+        return min(cellWidth * 0.76, 120)   // 图标占格子宽度 76%，上限 120pt
+    }
 
     var body: some View {
         ZStack {
@@ -168,7 +181,8 @@ struct LaunchpadView: View {
             } else {
                 GridPageView(
                     items: items, apps: viewModel.allApps, folders: [:],
-                    columns: cols, pageIndex: 0, isEditMode: false, dragState: DragState(),
+                    columns: cols, iconSize: effectiveIconSize,
+                    pageIndex: 0, isEditMode: false, dragState: DragState(),
                     onTapApp: { viewModel.launch($0) }, onTapFolder: { _ in },
                     onLongPress: {}, onDeleteApp: nil,
                     onBeginDrag: { _, _, _ in }, onUpdateDragTarget: { _, _ in }, onEndDrag: {},
@@ -194,6 +208,7 @@ struct LaunchpadView: View {
             apps: viewModel.allApps,
             folders: viewModel.layout.folders,
             columns: cols,
+            iconSize: effectiveIconSize,
             pageIndex: pageIdx,
             isEditMode: viewModel.isEditMode,
             dragState: viewModel.dragState,
@@ -231,7 +246,8 @@ struct LaunchpadView: View {
            let app = viewModel.allApps.first(where: { $0.bundleID == ds.draggedBundleID }) {
             AppIconView(
                 app: app,
-                isEditMode: false,   // 浮动图标不显示抖动/删除按钮
+                iconSize: effectiveIconSize,
+                isEditMode: false,
                 onTap: {},
                 onLongPress: {},
                 onDelete: nil
