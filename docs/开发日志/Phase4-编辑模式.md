@@ -107,3 +107,14 @@
 - MAS 应用实际卸载流程（Phase 7）
 - 跨页拖拽（Phase 6）
 - 触控板两指滑动翻页（Phase 6，见 Phase 2 日志 TODO-1）
+
+---
+
+## 六、修复记录
+
+### Bug 1：编辑模式下无法拖拽图标
+**根因**：`AppIconView` 内 `Button` 在编辑模式下仍参与命中检测（`allowsHitTesting` 默认 true），捕获了所有 `mouseDown` 事件，父级 `VStack` 的 `DragGesture` 永远收不到事件起点，`onChanged` 无法触发。  
+**修复**：
+- `AppIconView`：编辑模式下对 Button 设置 `.allowsHitTesting(!isEditMode)`，让 mouseDown 事件穿透到父级 VStack
+- `FolderThumbnailView`：同理，编辑模式下设置 `.allowsHitTesting(!isEditMode)`
+- `GridPageView`：`.gesture(dragGesture, including: isEditMode ? .all : .subviews)` 代替 `nil` 条件判断，非编辑模式下手势仅传给子视图
