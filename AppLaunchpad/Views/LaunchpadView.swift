@@ -279,7 +279,7 @@ struct LaunchpadView: View {
                 Divider()
 
                 SettingsView()
-                    .frame(height: 300)
+                    .frame(height: 340)
             }
             .frame(width: 480)
             .background(

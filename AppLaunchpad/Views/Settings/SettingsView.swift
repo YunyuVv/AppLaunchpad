@@ -1,61 +1,132 @@
 import SwiftUI
 
-/// 设置页面：外观 + 显示器 + 关于
-struct SettingsView: View {
-    @Bindable private var prefs = UserPreferences.shared
+// MARK: - 菜单项枚举
 
-    var body: some View {
-        TabView {
-            AppearanceTab(prefs: prefs)
-                .tabItem { Label("外观", systemImage: "paintbrush") }
+enum SettingsSection: String, CaseIterable, Identifiable {
+    case appearance = "外观"
+    case display    = "显示器"
+    case about      = "关于"
 
-            DisplayTab(prefs: prefs)
-                .tabItem { Label("显示器", systemImage: "display") }
+    var id: String { rawValue }
 
-            AboutTab()
-                .tabItem { Label("关于", systemImage: "info.circle") }
+    var icon: String {
+        switch self {
+        case .appearance: return "paintbrush"
+        case .display:    return "display"
+        case .about:      return "info.circle"
         }
-        .frame(width: 420, height: 300)
     }
 }
 
-// MARK: - 外观 Tab
+// MARK: - 设置主视图（左右结构）
 
-private struct AppearanceTab: View {
+/// 左侧菜单 + 右侧内容的双栏设置页面
+struct SettingsView: View {
+    @State private var selected: SettingsSection = .appearance
+    @Bindable private var prefs = UserPreferences.shared
+
+    var body: some View {
+        HStack(spacing: 0) {
+            // ── 左侧菜单栏
+            sidebar
+
+            Divider()
+
+            // ── 右侧内容区
+            contentArea
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+        }
+    }
+
+    // MARK: - 左侧菜单
+
+    private var sidebar: some View {
+        VStack(alignment: .leading, spacing: 2) {
+            ForEach(SettingsSection.allCases) { section in
+                sidebarItem(section)
+            }
+            Spacer()
+        }
+        .padding(.vertical, 12)
+        .padding(.horizontal, 8)
+        .frame(width: 140)
+        .background(Color(nsColor: .windowBackgroundColor).opacity(0.6))
+    }
+
+    private func sidebarItem(_ section: SettingsSection) -> some View {
+        HStack(spacing: 8) {
+            Image(systemName: section.icon)
+                .font(.system(size: 14))
+                .frame(width: 20)
+                .foregroundStyle(selected == section ? .white : .secondary)
+            Text(section.rawValue)
+                .font(.system(size: 13))
+                .foregroundStyle(selected == section ? .white : .primary)
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 7)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+            RoundedRectangle(cornerRadius: 7)
+                .fill(selected == section ? Color.accentColor : Color.clear)
+        )
+        .contentShape(Rectangle())
+        .onTapGesture { withAnimation(.easeInOut(duration: 0.15)) { selected = section } }
+    }
+
+    // MARK: - 右侧内容
+
+    @ViewBuilder
+    private var contentArea: some View {
+        switch selected {
+        case .appearance:
+            AppearancePane(prefs: prefs)
+        case .display:
+            DisplayPane(prefs: prefs)
+        case .about:
+            AboutPane()
+        }
+    }
+}
+
+// MARK: - 外观
+
+private struct AppearancePane: View {
     @Bindable var prefs: UserPreferences
 
     var body: some View {
         Form {
-            Section("背景") {
+            Section("背景遮罩") {
                 VStack(alignment: .leading, spacing: 8) {
                     HStack {
-                        Text("遮罩透明度")
+                        Text("透明度")
                         Spacer()
                         Text(String(format: "%.0f%%", prefs.backgroundOverlayOpacity * 100))
                             .foregroundStyle(.secondary)
                             .monospacedDigit()
+                            .frame(width: 40, alignment: .trailing)
                     }
                     Slider(value: $prefs.backgroundOverlayOpacity, in: 0...0.8, step: 0.05)
-                    Text("较低数值让背景更清晰，较高数值让图标更易辨认")
+                    Text("数值越低背景越清晰，越高图标越易辨认")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
             }
         }
         .formStyle(.grouped)
-        .padding()
+        .padding(.vertical, 8)
     }
 }
 
-// MARK: - 显示器 Tab
+// MARK: - 显示器
 
-private struct DisplayTab: View {
+private struct DisplayPane: View {
     @Bindable var prefs: UserPreferences
 
     var body: some View {
         Form {
             Section("多显示器") {
-                Picker("启动台显示位置", selection: $prefs.multiMonitorMode) {
+                Picker("启动台位置", selection: $prefs.multiMonitorMode) {
                     ForEach(UserPreferences.MultiMonitorMode.allCases, id: \.self) { mode in
                         Text(mode.label).tag(mode)
                     }
@@ -64,37 +135,32 @@ private struct DisplayTab: View {
             }
         }
         .formStyle(.grouped)
-        .padding()
+        .padding(.vertical, 8)
     }
 }
 
-// MARK: - 关于 Tab
+// MARK: - 关于
 
-private struct AboutTab: View {
+private struct AboutPane: View {
     var body: some View {
         VStack(spacing: 16) {
             Image(systemName: "square.grid.3x3.fill")
-                .font(.system(size: 48))
+                .font(.system(size: 44))
                 .foregroundStyle(.blue)
 
             VStack(spacing: 4) {
                 Text("AppLaunchpad")
-                    .font(.title2.bold())
+                    .font(.title3.bold())
                 Text("版本 0.1.0")
+                    .font(.subheadline)
                     .foregroundStyle(.secondary)
             }
 
             Text("macOS 26 启动台替代应用")
+                .font(.subheadline)
                 .foregroundStyle(.secondary)
-
-            Divider()
-
-            HStack(spacing: 6) {
-                Text("触控板翻页：待修复（TODO-1）")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
         }
-        .padding(24)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .padding()
     }
 }
