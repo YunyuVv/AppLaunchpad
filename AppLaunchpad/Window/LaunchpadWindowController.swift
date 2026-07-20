@@ -22,6 +22,7 @@ final class LaunchpadWindowController {
     private let viewModel: LaunchpadViewModel
 
     private var accumulatedScrollX: CGFloat = 0
+    private var accumulatedScrollY: CGFloat = 0  // 同时记录 Y，用于判断方向是否以水平为主
     private var lastPageFlipTime: Date = .distantPast
 
     var isVisible: Bool { panel?.isVisible ?? false }
@@ -79,13 +80,13 @@ final class LaunchpadWindowController {
                 return nil
             case 123: // ← 方向键：搜索时透传给 TextField
                 if !viewModel.isSearching {
-                    viewModel.goToPreviousPage()
+                    withAnimation(.spring(duration: 0.3, bounce: 0.1)) { viewModel.goToPreviousPage() }
                     return nil
                 }
                 return event
             case 124: // → 方向键：同上
                 if !viewModel.isSearching {
-                    viewModel.goToNextPage()
+                    withAnimation(.spring(duration: 0.3, bounce: 0.1)) { viewModel.goToNextPage() }
                     return nil
                 }
                 return event
@@ -102,33 +103,39 @@ final class LaunchpadWindowController {
     private func setupScrollMonitor() {
         guard scrollMonitor == nil else { return }
         accumulatedScrollX = 0
+        accumulatedScrollY = 0
 
         scrollMonitor = NSEvent.addLocalMonitorForEvents(matching: .scrollWheel) { [weak self] event in
             guard let self, !viewModel.isSearching else { return event }
+            guard event.momentumPhase == .none else { return event }  // 忽略惯性阶段
 
-            let dx = event.scrollingDeltaX
-            let dy = event.scrollingDeltaY
-
-            // 只处理横向为主的滚动
-            guard abs(dx) > abs(dy), abs(dx) > 0.5 else { return event }
-
-            // 惯性阶段忽略，防止翻多页
-            guard event.momentumPhase == .none else { return event }
-
-            accumulatedScrollX += dx
-
-            // 用 debounce 定时器检测手势结束（不依赖 phase == .ended，更兼容）
-            scrollDebounceTimer?.invalidate()
-            scrollDebounceTimer = Timer.scheduledTimer(withTimeInterval: 0.15, repeats: false) { [weak self] _ in
-                guard let self else { return }
-                Task { @MainActor [weak self] in
-                    guard let self else { return }
-                    if self.accumulatedScrollX < -20 {
-                        self.flipPage(deltaX: -100)
-                    } else if self.accumulatedScrollX > 20 {
-                        self.flipPage(deltaX: 100)
+            if event.hasPreciseScrollingDeltas {
+                // ── 触控板：用 phase 全程累积 x 和 y，只在 .ended 时整体判断方向
+                switch event.phase {
+                case .began:
+                    accumulatedScrollX = 0
+                    accumulatedScrollY = 0
+                case .changed:
+                    accumulatedScrollX += event.scrollingDeltaX
+                    accumulatedScrollY += event.scrollingDeltaY
+                case .ended, .cancelled:
+                    let ax = abs(accumulatedScrollX)
+                    let ay = abs(accumulatedScrollY)
+                    // 水平方向主导且幅度足够时翻页
+                    if ax > ay && ax > 20 {
+                        flipPage(deltaX: accumulatedScrollX > 0 ? 100 : -100)
                     }
-                    self.accumulatedScrollX = 0
+                    accumulatedScrollX = 0
+                    accumulatedScrollY = 0
+                default:
+                    break
+                }
+            } else {
+                // ── 物理鼠标滚轮：每步事件直接响应
+                if event.deltaX < 0 {
+                    flipPage(deltaX: -100)
+                } else if event.deltaX > 0 {
+                    flipPage(deltaX: 100)
                 }
             }
 

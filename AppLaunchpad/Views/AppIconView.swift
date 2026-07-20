@@ -28,9 +28,11 @@ struct AppIconView: View {
         }
         .buttonStyle(.plain)
         .onHover { isHovering = $0 }
-        .task {
+        .task(id: app.id) {
+            // task(id:) 确保切页时为新 app 重新加载图标
             icon = await IconCache.shared.icon(for: app)
         }
+        .animation(.easeIn(duration: 0.15), value: icon != nil)
     }
 
     @ViewBuilder
@@ -40,9 +42,11 @@ struct AppIconView: View {
                 .resizable()
                 .interpolation(.high)
                 .antialiased(true)
+                .transition(.opacity)
         } else {
             RoundedRectangle(cornerRadius: 18)
                 .fill(Color.white.opacity(0.12))
+                .transition(.opacity)
         }
     }
 }

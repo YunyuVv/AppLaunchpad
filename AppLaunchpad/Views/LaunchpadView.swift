@@ -66,12 +66,21 @@ struct LaunchpadView: View {
                 guard !viewModel.isSearching else { return }
                 isDragging = false
                 let threshold: CGFloat = 50
-                withAnimation(.spring(duration: 0.3, bounce: 0.1)) {
-                    dragOffsetX = 0
-                    if value.translation.width < -threshold {
-                        viewModel.goToNextPage()
-                    } else if value.translation.width > threshold {
-                        viewModel.goToPreviousPage()
+                let goNext = value.translation.width < -threshold
+                let goPrev = value.translation.width > threshold
+
+                // 立即归零 offset（不参与动画），让 transition 独立负责滑入/滑出
+                dragOffsetX = 0
+
+                if goNext || goPrev {
+                    withAnimation(.spring(duration: 0.3, bounce: 0.1)) {
+                        if goNext { viewModel.goToNextPage() }
+                        else      { viewModel.goToPreviousPage() }
+                    }
+                } else {
+                    // 未达到翻页阈值，弹回原位
+                    withAnimation(.spring(duration: 0.3, bounce: 0.1)) {
+                        dragOffsetX = 0
                     }
                 }
             }
@@ -87,6 +96,7 @@ struct LaunchpadView: View {
             searchResultsView
         } else {
             pagingView
+                .clipped()  // 防止 transition 动画溢出到搜索框/页码区域
         }
     }
 
