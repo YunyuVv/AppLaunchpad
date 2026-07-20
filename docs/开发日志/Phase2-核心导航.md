@@ -109,9 +109,24 @@ HStack(spacing: 0) {
 **原因**：`NSScreen.main` 返回的是当前有键盘焦点的窗口所在屏幕，若用户在副屏操作则返回副屏。  
 **修复**：改用 `NSScreen.screens.first`，这是系统设置中被设为「主显示器」的屏幕（带菜单栏）。`show()` 每次调用时用 `panel.setFrame(primaryScreen.frame)` 更新位置，确保多显示器切换后也能显示在正确位置。
 
+### Bug 4：搜索框和页码指示器消失（修复主屏幕后引入）
+**原因**：`panel.setFrame(display: false)` 不触发重绘，`GeometryReader` 在 `NSHostingView` 中拿到的 `geo.size.width = 0`，导致 `pagingView` 每页宽度为 0，`Spacer` 吞掉全部垂直空间，搜索框和页码指示器被挤出可见区域。  
+**修复**：移除 `GeometryReader`，改为直接从 `NSScreen.screens.first?.frame.width` 取页宽，规避 NSHostingView 中 GeometryReader 的延迟更新问题。`panel.setFrame` 改为 `display: true` 强制重绘。
+
+### Bug 5：触控板滑动仍无法翻页 / 鼠标滚轮无响应
+**原因**：上次修复的 `scrollWheel` 监听只处理了 `event.phase == .ended` 分支（触控板手势松手）。物理鼠标滚轮的 `event.phase` 恒为 `.none`，条件永远不满足，所以鼠标滚轮无效。触控板在某些系统版本下 `scrollingDeltaX` 方向与预期相反，导致阈值判断失败。  
+**修复**：区分两种输入设备：
+- `phase == .none && momentumPhase == .none` → 物理鼠标滚轮，每个事件立即判断方向（deltaX × 3 放大灵敏度）
+- `phase != .none` → 触控板手势，累积 delta，松手时判断
+- 增加 300ms 防抖防止连续翻多页
+
 ---
 
-## 六、已知问题 / 遗留事项
+## 六、待办（TODO）
+
+- **背景遮罩透明度**：`BackgroundView.swift` 固定 `opacity(0.45)`，Phase 7 设置页面开放用户配置
+
+## 七、已知遗留事项
 
 - 关闭动画暂未实现（面板直接消失，后续迭代优化）
 - 主屏幕目前硬编码，Phase 7 设置页面中添加「显示在鼠标所在屏幕」可配置项
