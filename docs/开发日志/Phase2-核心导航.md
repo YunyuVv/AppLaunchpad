@@ -127,9 +127,13 @@ HStack(spacing: 0) {
 **原因 B**：键盘监听中方向键（keyCode 123/124）无论是否在搜索模式一律 `return nil`（消耗事件），导致搜索框里光标无法用方向键移动，字符输入也受影响。  
 **修复**：搜索模式下方向键 `return event` 透传给 TextField，仅在非搜索模式下消耗并翻页。
 
----
+### Bug 7：搜索框仍无法输入文字（深层原因）
+**原因**：`NSPanel` 设置 `.borderless` styleMask 后，`canBecomeKey` 默认返回 `false`。窗口无法成为 key window，内部 SwiftUI `TextField` 永远无法成为 `firstResponder`，自然无法接收键盘输入。Escape 等快捷键能工作是因为用的是 App 级 `NSEvent.addLocalMonitorForEvents`，不依赖 key window 状态。  
+**修复**：新增 `KeyablePanel: NSPanel` 子类，覆盖 `canBecomeKey` 和 `canBecomeMain` 均返回 `true`。
 
-## 六、待办（TODO）
+### Bug 8：底部页码指示器被 Dock 遮挡
+**原因**：`panel.frame = screen.frame`（物理全屏坐标），Dock 悬浮在面板之上。  
+**修复**：呼出时执行 `NSApp.presentationOptions = [.hideDock, .autoHideMenuBar]` 隐藏 Dock 和菜单栏（与原生 Launchpad 行为一致）；关闭时执行 `presentationOptions = []` 完全恢复。
 
 - **背景遮罩透明度**：`BackgroundView.swift` 固定 `opacity(0.45)`，Phase 7 设置页面开放用户配置
 
