@@ -52,6 +52,8 @@ struct GridPageView: View {
             case .app(let bundleID):
                 if let app = apps.first(where: { $0.bundleID == bundleID }) {
                     let isDragged = dragState.isDragging && dragState.draggedBundleID == bundleID
+                    let isFolderTarget = dragState.folderTargetID == bundleID
+
                     AppIconView(
                         app: app,
                         isEditMode: isEditMode,
@@ -59,10 +61,18 @@ struct GridPageView: View {
                         onLongPress: onLongPress,
                         onDelete: app.isMASApp ? { onDeleteApp?(app) } : nil
                     )
-                    // 正在拖拽：原位置显示幽灵占位（轮廓 + 低透明度）
+                    // 被拖图标：幽灵占位
                     .opacity(isDragged ? 0.25 : 1.0)
-                    // 其他图标让位动画
+                    // 文件夹创建目标：放大 + 亮圈提示
+                    .scaleEffect(isFolderTarget ? 1.12 : 1.0)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 22)
+                            .strokeBorder(Color.white.opacity(isFolderTarget ? 0.8 : 0), lineWidth: 2)
+                            .frame(width: 88, height: 88)
+                            .allowsHitTesting(false)
+                    )
                     .animation(.spring(duration: 0.2), value: dragState.targetSlotIndex)
+                    .animation(.spring(duration: 0.25), value: isFolderTarget)
                 } else {
                     Color.clear.frame(width: 100)
                 }

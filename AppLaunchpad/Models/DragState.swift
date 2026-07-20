@@ -7,8 +7,10 @@ struct DragState {
     var sourcePageIndex: Int = 0
     var sourceSlotIndex: Int = 0
     var targetSlotIndex: Int = 0
-    /// 鼠标当前位置（SwiftUI global 坐标），用于渲染浮动图标
     var dragLocation: CGPoint = .zero
+    /// 悬停足够长时间后，准备与之合并的目标 app bundleID（触发文件夹创建）
+    var folderTargetID: String? = nil
 
     var isEmpty: Bool { !isDragging }
+    var isFolderMode: Bool { folderTargetID != nil }
 }

@@ -19,6 +19,9 @@ final class LaunchpadViewModel {
     var isEditMode: Bool = false
     var dragState: DragState = DragState()
 
+    // 悬停计时器：用于检测拖拽到另一个 App 上 0.7s 后进入文件夹创建模式
+    private var folderHoverTimer: Timer? = nil
+
     // MARK: - 翻页方向（供视图层 transition 使用）
     private(set) var pageFlipGoingForward: Bool = true
 
@@ -80,6 +83,8 @@ final class LaunchpadViewModel {
     }
 
     func exitEditMode() {
+        folderHoverTimer?.invalidate()
+        folderHoverTimer = nil
         isEditMode = false
         dragState = DragState()
     }
@@ -99,34 +104,73 @@ final class LaunchpadViewModel {
 
     func updateDragTarget(slotIndex: Int, location: CGPoint) {
         guard dragState.isDragging else { return }
+
+        let prevSlot = dragState.targetSlotIndex
         dragState.targetSlotIndex = slotIndex
         dragState.dragLocation = location
+
+        // 切换到新槽位时：清除文件夹模式，重启悬停计时器
+        if slotIndex != prevSlot {
+            dragState.folderTargetID = nil
+            folderHoverTimer?.invalidate()
+            folderHoverTimer = nil
+
+            // 检查新槽位是否是另一个 app（原始布局，非预览）
+            let page = dragState.sourcePageIndex
+            guard page < layout.pages.count,
+                  slotIndex < layout.pages[page].count,
+                  case .app(let targetID) = layout.pages[page][slotIndex],
+                  targetID != dragState.draggedBundleID else { return }
+
+            // 悬停 0.7s 后进入文件夹创建模式
+            folderHoverTimer = Timer.scheduledTimer(withTimeInterval: 0.7, repeats: false) { [weak self] _ in
+                Task { @MainActor [weak self] in
+                    guard let self,
+                          self.dragState.isDragging,
+                          self.dragState.targetSlotIndex == slotIndex else { return }
+                    self.dragState.folderTargetID = targetID
+                }
+            }
+        }
     }
 
     func endDrag() {
+        folderHoverTimer?.invalidate()
+        folderHoverTimer = nil
         guard dragState.isDragging else { return }
-        let src = dragState.sourceSlotIndex
-        let dst = dragState.targetSlotIndex
+
         let page = dragState.sourcePageIndex
 
-        if src != dst, page < layout.pages.count {
-            var items = layout.pages[page]
-            guard src < items.count else { dragState = DragState(); return }
-            let item = items.remove(at: src)
-            let insertAt = min(dst, items.count)
-            items.insert(item, at: insertAt)
-            layout.pages[page] = items
-            saveLayout()
+        if let targetID = dragState.folderTargetID {
+            // 文件夹创建模式：悬停在另一个 app 上 0.7s 后松手
+            createFolder(sourceID: dragState.draggedBundleID, targetID: targetID, pageIndex: page)
+        } else {
+            // 普通重排
+            let src = dragState.sourceSlotIndex
+            let dst = dragState.targetSlotIndex
+            if src != dst, page < layout.pages.count {
+                var items = layout.pages[page]
+                guard src < items.count else { dragState = DragState(); return }
+                let item = items.remove(at: src)
+                items.insert(item, at: min(dst, items.count))
+                layout.pages[page] = items
+                saveLayout()
+            }
         }
         dragState = DragState()
     }
 
-    /// 拖拽时返回当前页的"视觉排列"（被拖图标插入目标槽位，其余让位）
+    /// 拖拽时返回当前页的"视觉排列"
+    /// 文件夹创建模式下：保持原始排列（不做让位，目标 App 会高亮显示）
+    /// 普通重排模式下：被拖图标插入目标槽位，其余让位
     func pageItemsWithDrag(pageIndex: Int) -> [LayoutItem] {
         guard dragState.isDragging, dragState.sourcePageIndex == pageIndex,
               pageIndex < layout.pages.count else {
             return pageIndex < layout.pages.count ? layout.pages[pageIndex] : []
         }
+        // 文件夹模式：原始排列不动，视觉高亮由 folderTargetID 驱动
+        if dragState.isFolderMode { return layout.pages[pageIndex] }
+
         var items = layout.pages[pageIndex]
         let src = dragState.sourceSlotIndex
         let dst = dragState.targetSlotIndex
