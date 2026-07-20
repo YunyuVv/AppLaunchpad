@@ -163,9 +163,11 @@ struct LaunchpadView: View {
     private var pagingView: some View {
         let cols = viewModel.columnCount(for: targetScreen)
         let pageIdx = viewModel.currentPageIndex
-        let pageItems = viewModel.isEditMode
-            ? viewModel.pageItemsWithDrag(pageIndex: pageIdx)
-            : (pageIdx < viewModel.layout.pages.count ? viewModel.layout.pages[pageIdx] : [])
+        // 拖拽中始终使用原始布局（不做让位预览），松手后才动画归位
+        // 这样 B 不会在 A 靠近时逃跑，文件夹创建才可行
+        let pageItems = pageIdx < viewModel.layout.pages.count
+            ? viewModel.layout.pages[pageIdx]
+            : []
         let insertEdge: Edge = viewModel.pageFlipGoingForward ? .trailing : .leading
         let removeEdge: Edge = viewModel.pageFlipGoingForward ? .leading  : .trailing
 

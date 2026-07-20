@@ -61,17 +61,16 @@ struct GridPageView: View {
                         onLongPress: onLongPress,
                         onDelete: app.isMASApp ? { onDeleteApp?(app) } : nil
                     )
-                    // 被拖图标：幽灵占位
-                    .opacity(isDragged ? 0.25 : 1.0)
-                    // 文件夹创建目标：放大 + 亮圈提示
+                    // 被拖图标：幽灵占位（原位保持不动）
+                    .opacity(isDragged ? 0.2 : 1.0)
+                    // 文件夹创建目标：放大 + 亮圈
                     .scaleEffect(isFolderTarget ? 1.12 : 1.0)
                     .overlay(
                         RoundedRectangle(cornerRadius: 22)
-                            .strokeBorder(Color.white.opacity(isFolderTarget ? 0.8 : 0), lineWidth: 2)
+                            .strokeBorder(Color.white.opacity(isFolderTarget ? 0.85 : 0), lineWidth: 2)
                             .frame(width: 88, height: 88)
                             .allowsHitTesting(false)
                     )
-                    .animation(.spring(duration: 0.2), value: dragState.targetSlotIndex)
                     .animation(.spring(duration: 0.25), value: isFolderTarget)
                 } else {
                     Color.clear.frame(width: 100)
