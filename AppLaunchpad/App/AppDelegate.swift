@@ -71,9 +71,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     @objc private func openSettings() {
-        // 激活 App 并打开系统设置窗口（SwiftUI Settings scene）
-        NSApp.activate(ignoringOtherApps: true)
-        NSApp.sendAction(Selector(("showSettingsWindow:")), to: nil, from: nil)
+        windowController?.openSettings()
     }
 
     // MARK: - 切换显示

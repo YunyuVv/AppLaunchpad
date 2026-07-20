@@ -54,8 +54,45 @@ final class LaunchpadWindowController {
         removeMonitors()
         panel?.orderOut(nil)
         viewModel.hide()
-        // 恢复 Dock + 菜单栏
         NSApp.presentationOptions = []
+    }
+
+    /// 在面板上方打开设置窗口（不关闭面板）
+    /// 原理：临时把面板 level 降到 .normal，让普通的设置窗口浮在上方
+    func openSettings() {
+        guard let panel else {
+            // 面板未显示时直接打开设置
+            activateAndShowSettings()
+            return
+        }
+
+        let normalLevel = NSWindow.Level(rawValue: Int(CGWindowLevelForKey(.normalWindow)))
+        panel.level = normalLevel
+
+        activateAndShowSettings()
+
+        // 监听任意非面板窗口关闭 → 恢复面板 level
+        let highLevel = NSWindow.Level(rawValue: Int(CGWindowLevelForKey(.screenSaverWindow)) - 1)
+        NotificationCenter.default.addObserver(
+            forName: NSWindow.willCloseNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self, weak panel] notification in
+            guard let closingWindow = notification.object as? NSWindow,
+                  closingWindow !== panel else { return }
+            panel?.level = highLevel
+            if let self {
+                NotificationCenter.default.removeObserver(
+                    self, name: NSWindow.willCloseNotification, object: nil
+                )
+            }
+        }
+    }
+
+    private func activateAndShowSettings() {
+        NSApp.setActivationPolicy(.regular)
+        NSApp.activate(ignoringOtherApps: true)
+        NSApp.sendAction(Selector(("showSettingsWindow:")), to: nil, from: nil)
     }
 
     // MARK: - 主屏幕
@@ -199,9 +236,11 @@ final class LaunchpadWindowController {
         p.backgroundColor = .clear
         p.hasShadow = false
 
-        let rootView = LaunchpadView(viewModel: viewModel, onDismiss: { [weak self] in
-            self?.hide()
-        })
+        let rootView = LaunchpadView(
+            viewModel: viewModel,
+            onDismiss: { [weak self] in self?.hide() },
+            onOpenSettings: { [weak self] in self?.openSettings() }
+        )
         p.contentView = NSHostingView(rootView: rootView)
         return p
     }

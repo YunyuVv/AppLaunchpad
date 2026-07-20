@@ -4,6 +4,7 @@ import SwiftUI
 struct LaunchpadView: View {
     @Bindable var viewModel: LaunchpadViewModel
     let onDismiss: () -> Void
+    let onOpenSettings: () -> Void   // 由 LaunchpadWindowController 注入，避免循环依赖
 
     @State private var appeared = false
     @State private var dragOffsetX: CGFloat = 0
@@ -234,11 +235,6 @@ struct LaunchpadView: View {
     // MARK: - 辅助
 
     private func openSettings() {
-        // 关闭面板，激活 App，打开设置窗口
-        onDismiss()
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-            NSApp.activate(ignoringOtherApps: true)
-            NSApp.sendAction(Selector(("showSettingsWindow:")), to: nil, from: nil)
-        }
+        onOpenSettings()
     }
 }
