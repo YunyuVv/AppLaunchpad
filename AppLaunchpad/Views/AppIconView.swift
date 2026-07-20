@@ -32,10 +32,9 @@ struct AppIconView: View {
             }
             .buttonStyle(.plain)
             .onHover { isHovering = $0 }
-            .onLongPressGesture(minimumDuration: 0.5) { onLongPress() }
+            // maximumDistance: 100 防止轻微鼠标抖动取消长按（macOS 默认值太小）
+            .onLongPressGesture(minimumDuration: 0.5, maximumDistance: 100) { onLongPress() }
             .wobble(isEditMode)
-            // 编辑模式下禁用 Button 命中检测，让事件穿透到父级 VStack 的 DragGesture
-            .allowsHitTesting(!isEditMode)
             .task(id: app.id) {
                 icon = await IconCache.shared.icon(for: app)
             }
