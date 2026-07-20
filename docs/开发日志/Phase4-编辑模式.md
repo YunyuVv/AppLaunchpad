@@ -118,3 +118,20 @@
 - `AppIconView`：编辑模式下对 Button 设置 `.allowsHitTesting(!isEditMode)`，让 mouseDown 事件穿透到父级 VStack
 - `FolderThumbnailView`：同理，编辑模式下设置 `.allowsHitTesting(!isEditMode)`
 - `GridPageView`：`.gesture(dragGesture, including: isEditMode ? .all : .subviews)` 代替 `nil` 条件判断，非编辑模式下手势仅传给子视图
+
+---
+
+## 六、未解决 TODO
+
+### TODO-2：图标拖拽排序最终无法落位
+**现象**：拖拽可以自由移动，松手后图标不归位/不重排。  
+**已分析**：SwiftUI 拖拽闭包捕获旧 struct 导致 `hasBegunDrag` 方案仍有问题，`endDrag()` 的调用时机不确定。  
+**预计阶段**：Phase 6 深度调试
+
+### TODO-3：拖拽创建文件夹无效
+**现象**：悬停 0.7s 计时器可能正常触发（白圈高亮出现），但 `createFolder` 执行后文件夹未在界面显示，或 `endDrag` 未被正确调用。  
+**预计阶段**：Phase 6 与 TODO-2 一并修复
+
+### TODO-4：跨页拖拽触发翻页后图标无法落入新页
+**现象**：边缘触发翻页后 `endDrag` 调用的是原来页的布局，新页槽位信息未同步。  
+**预计阶段**：Phase 6
