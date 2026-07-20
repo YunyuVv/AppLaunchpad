@@ -4,12 +4,13 @@ import SwiftUI
 struct LaunchpadView: View {
     @Bindable var viewModel: LaunchpadViewModel
     let onDismiss: () -> Void
-    let onOpenSettings: () -> Void   // 由 LaunchpadWindowController 注入，避免循环依赖
+    let onOpenSettings: () -> Void   // 保留兼容，不再使用外部窗口
 
     @State private var appeared = false
     @State private var dragOffsetX: CGFloat = 0
     @State private var isDragging = false
     @State private var expandedFolder: FolderInfo? = nil
+    @State private var showSettingsOverlay = false   // 面板内设置浮层
 
     private var pageWidth: CGFloat { NSScreen.screens.first?.frame.width ?? 1440 }
     private var targetScreen: NSScreen { NSScreen.screens.first ?? NSScreen.screens[0] }
@@ -84,6 +85,11 @@ struct LaunchpadView: View {
                     }
                 )
                 .transition(.scale(scale: 0.7).combined(with: .opacity))
+            }
+
+            // 设置浮层（面板内渲染，不依赖外部 NSWindow）
+            if showSettingsOverlay {
+                settingsOverlay
             }
 
             // 拖拽浮动图标：跟随鼠标自由移动，不参与命中检测
@@ -235,6 +241,57 @@ struct LaunchpadView: View {
     // MARK: - 辅助
 
     private func openSettings() {
-        onOpenSettings()
+        withAnimation(.spring(duration: 0.25, bounce: 0.1)) {
+            showSettingsOverlay = true
+        }
+    }
+
+    // MARK: - 设置浮层（面板内渲染，不依赖外部 NSWindow / presentationOptions）
+
+    private var settingsOverlay: some View {
+        ZStack {
+            // 背景遮罩，点击关闭
+            Color.black.opacity(0.5)
+                .ignoresSafeArea()
+                .onTapGesture {
+                    withAnimation(.spring(duration: 0.25)) { showSettingsOverlay = false }
+                }
+
+            // 设置卡片
+            VStack(spacing: 0) {
+                // 标题栏
+                HStack {
+                    Text("设置")
+                        .font(.headline)
+                    Spacer()
+                    Button {
+                        withAnimation(.spring(duration: 0.25)) { showSettingsOverlay = false }
+                    } label: {
+                        Image(systemName: "xmark.circle.fill")
+                            .font(.title3)
+                            .foregroundStyle(.secondary)
+                    }
+                    .buttonStyle(.plain)
+                }
+                .padding(.horizontal, 20)
+                .padding(.vertical, 14)
+
+                Divider()
+
+                SettingsView()
+                    .frame(height: 300)
+            }
+            .frame(width: 480)
+            .background(
+                RoundedRectangle(cornerRadius: 16)
+                    .fill(.regularMaterial)
+                    .overlay(RoundedRectangle(cornerRadius: 16).strokeBorder(.white.opacity(0.12), lineWidth: 1))
+            )
+            .shadow(color: .black.opacity(0.4), radius: 30, x: 0, y: 10)
+            .contentShape(Rectangle())
+            .onTapGesture {}    // 阻止点击穿透到背景
+        }
+        .transition(.opacity.combined(with: .scale(scale: 0.95)))
+        .zIndex(500)
     }
 }
