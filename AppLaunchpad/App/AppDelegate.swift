@@ -19,6 +19,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         Task {
             await vm.loadApps()
         }
+
+        // 临时全局快捷键：Cmd+L 呼出/关闭（Phase 3 替换为 F4）
+        NSEvent.addGlobalMonitorForEvents(matching: .keyDown) { [weak self] event in
+            // keyCode 37 = L
+            guard event.modifierFlags.contains(.command), event.keyCode == 37 else { return }
+            Task { @MainActor [weak self] in self?.toggle() }
+        }
     }
 
     /// Dock 图标点击或 App 再次激活时，切换启动台显示/隐藏

@@ -7,23 +7,56 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		1468118946B482229EFFF870 /* IconCache.swift in Sources */ = {isa = PBXBuildFile; fileRef = C9E6F8441A87939DD7AD5F64 /* IconCache.swift */; };
 		2A34A0F611588FDA089AB033 /* LayoutData.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9BA6BC8E074B251A875E3599 /* LayoutData.swift */; };
+		30F2F846DB09A6EE9B5D3683 /* GridPageView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0E7B942F0AE743967FAA542A /* GridPageView.swift */; };
+		33CC86A828615DA440BA4737 /* BackgroundView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6B1AD81D2C9486EF9AF88D3C /* BackgroundView.swift */; };
+		4B352FCD11F895B962E4E32D /* AppScanner.swift in Sources */ = {isa = PBXBuildFile; fileRef = 20008FEB2ECB7E9946A99CBD /* AppScanner.swift */; };
+		5CE2692CB791F7852C2A25FA /* LaunchpadWindowController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0348AEAAF07433837BCFCF59 /* LaunchpadWindowController.swift */; };
 		5FE9A826CEF11612C87B15A3 /* AppInfo.swift in Sources */ = {isa = PBXBuildFile; fileRef = 391A0D59F67B9A8DED268F55 /* AppInfo.swift */; };
+		67B5E83F4FC921228F24BC3D /* LaunchpadView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 646E7C03C74BB5E5619A63B7 /* LaunchpadView.swift */; };
+		8DFD8536819B54131C593C1D /* LaunchpadViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 33FF0D2288330AD2F43CCCE3 /* LaunchpadViewModel.swift */; };
 		A36A6D9E58E93500498FEAD6 /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2481B06DA5521D3CE3F58222 /* AppDelegate.swift */; };
+		AA8BABEF72A1D4BDC53403B5 /* AppIconView.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA26C5811E8E077635927696 /* AppIconView.swift */; };
 		E46A0A5C160467A0C14E5B04 /* AppLaunchpadApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0915EDF9A5283181DB0CF3DB /* AppLaunchpadApp.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
+		0348AEAAF07433837BCFCF59 /* LaunchpadWindowController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LaunchpadWindowController.swift; sourceTree = "<group>"; };
 		0915EDF9A5283181DB0CF3DB /* AppLaunchpadApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppLaunchpadApp.swift; sourceTree = "<group>"; };
+		0E7B942F0AE743967FAA542A /* GridPageView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GridPageView.swift; sourceTree = "<group>"; };
+		20008FEB2ECB7E9946A99CBD /* AppScanner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppScanner.swift; sourceTree = "<group>"; };
 		2481B06DA5521D3CE3F58222 /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppDelegate.swift; sourceTree = "<group>"; };
+		33FF0D2288330AD2F43CCCE3 /* LaunchpadViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LaunchpadViewModel.swift; sourceTree = "<group>"; };
 		391A0D59F67B9A8DED268F55 /* AppInfo.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppInfo.swift; sourceTree = "<group>"; };
 		4E5468B5E7544D5B8745AA7D /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		59C1E1B7C3ACC4BA22DFCBB0 /* AppLaunchpad.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = AppLaunchpad.entitlements; sourceTree = "<group>"; };
+		646E7C03C74BB5E5619A63B7 /* LaunchpadView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LaunchpadView.swift; sourceTree = "<group>"; };
+		6B1AD81D2C9486EF9AF88D3C /* BackgroundView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BackgroundView.swift; sourceTree = "<group>"; };
 		99EF354D7141BB013C65719A /* AppLaunchpad.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = AppLaunchpad.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		9BA6BC8E074B251A875E3599 /* LayoutData.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LayoutData.swift; sourceTree = "<group>"; };
+		C9E6F8441A87939DD7AD5F64 /* IconCache.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IconCache.swift; sourceTree = "<group>"; };
+		FA26C5811E8E077635927696 /* AppIconView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppIconView.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXGroup section */
+		3A495ACBBBF0D2BA1412EBC7 /* Services */ = {
+			isa = PBXGroup;
+			children = (
+				20008FEB2ECB7E9946A99CBD /* AppScanner.swift */,
+				C9E6F8441A87939DD7AD5F64 /* IconCache.swift */,
+			);
+			path = Services;
+			sourceTree = "<group>";
+		};
+		9B6F59EFF32BF8B85872E0F5 /* ViewModel */ = {
+			isa = PBXGroup;
+			children = (
+				33FF0D2288330AD2F43CCCE3 /* LaunchpadViewModel.swift */,
+			);
+			path = ViewModel;
+			sourceTree = "<group>";
+		};
 		A5739D7518944EDD24010D48 /* Products */ = {
 			isa = PBXGroup;
 			children = (
@@ -39,6 +72,14 @@
 				0915EDF9A5283181DB0CF3DB /* AppLaunchpadApp.swift */,
 			);
 			path = App;
+			sourceTree = "<group>";
+		};
+		CA2E636C133A8C624F0B17B9 /* Window */ = {
+			isa = PBXGroup;
+			children = (
+				0348AEAAF07433837BCFCF59 /* LaunchpadWindowController.swift */,
+			);
+			path = Window;
 			sourceTree = "<group>";
 		};
 		CB8C2FB4D17FE48FBC36A491 = {
@@ -63,10 +104,25 @@
 			children = (
 				AC64924C0C060EDE2C7DB0B9 /* App */,
 				F0595DAC755509464754CA10 /* Models */,
+				3A495ACBBBF0D2BA1412EBC7 /* Services */,
+				9B6F59EFF32BF8B85872E0F5 /* ViewModel */,
+				FADCBCE41079482ED837600B /* Views */,
+				CA2E636C133A8C624F0B17B9 /* Window */,
 				59C1E1B7C3ACC4BA22DFCBB0 /* AppLaunchpad.entitlements */,
 				4E5468B5E7544D5B8745AA7D /* Info.plist */,
 			);
 			path = AppLaunchpad;
+			sourceTree = "<group>";
+		};
+		FADCBCE41079482ED837600B /* Views */ = {
+			isa = PBXGroup;
+			children = (
+				FA26C5811E8E077635927696 /* AppIconView.swift */,
+				6B1AD81D2C9486EF9AF88D3C /* BackgroundView.swift */,
+				0E7B942F0AE743967FAA542A /* GridPageView.swift */,
+				646E7C03C74BB5E5619A63B7 /* LaunchpadView.swift */,
+			);
+			path = Views;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -128,8 +184,16 @@
 			buildActionMask = 2147483647;
 			files = (
 				A36A6D9E58E93500498FEAD6 /* AppDelegate.swift in Sources */,
+				AA8BABEF72A1D4BDC53403B5 /* AppIconView.swift in Sources */,
 				5FE9A826CEF11612C87B15A3 /* AppInfo.swift in Sources */,
 				E46A0A5C160467A0C14E5B04 /* AppLaunchpadApp.swift in Sources */,
+				4B352FCD11F895B962E4E32D /* AppScanner.swift in Sources */,
+				33CC86A828615DA440BA4737 /* BackgroundView.swift in Sources */,
+				30F2F846DB09A6EE9B5D3683 /* GridPageView.swift in Sources */,
+				1468118946B482229EFFF870 /* IconCache.swift in Sources */,
+				67B5E83F4FC921228F24BC3D /* LaunchpadView.swift in Sources */,
+				8DFD8536819B54131C593C1D /* LaunchpadViewModel.swift in Sources */,
+				5CE2692CB791F7852C2A25FA /* LaunchpadWindowController.swift in Sources */,
 				2A34A0F611588FDA089AB033 /* LayoutData.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
