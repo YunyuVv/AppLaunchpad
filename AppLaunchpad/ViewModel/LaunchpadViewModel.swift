@@ -21,6 +21,8 @@ final class LaunchpadViewModel {
 
     // 悬停计时器：用于检测拖拽到另一个 App 上 0.7s 后进入文件夹创建模式
     private var folderHoverTimer: Timer? = nil
+    // 边缘翻页计时器：拖拽到屏幕边缘时自动翻页
+    private var edgeScrollTimer: Timer? = nil
 
     // MARK: - 翻页方向（供视图层 transition 使用）
     private(set) var pageFlipGoingForward: Bool = true
@@ -85,6 +87,7 @@ final class LaunchpadViewModel {
     func exitEditMode() {
         folderHoverTimer?.invalidate()
         folderHoverTimer = nil
+        stopEdgeScrollTimer()
         isEditMode = false
         dragState = DragState()
     }
@@ -132,11 +135,44 @@ final class LaunchpadViewModel {
                 }
             }
         }
+
+        // 边缘翻页检测：拖拽到屏幕左/右边缘时自动翻页
+        detectEdgeScroll(location: location)
+    }
+
+    private func detectEdgeScroll(location: CGPoint) {
+        let screenWidth = NSScreen.screens.first?.frame.width ?? 1440
+        let edgeZone: CGFloat = 100
+
+        if location.x < edgeZone && currentPageIndex > 0 {
+            startEdgeScrollTimer(goNext: false)
+        } else if location.x > screenWidth - edgeZone && currentPageIndex < totalPages - 1 {
+            startEdgeScrollTimer(goNext: true)
+        } else {
+            stopEdgeScrollTimer()
+        }
+    }
+
+    private func startEdgeScrollTimer(goNext: Bool) {
+        guard edgeScrollTimer == nil else { return }   // 已有计时器，不重复创建
+        edgeScrollTimer = Timer.scheduledTimer(withTimeInterval: 0.8, repeats: false) { [weak self] _ in
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                if goNext { self.goToNextPage() } else { self.goToPreviousPage() }
+                self.edgeScrollTimer = nil
+            }
+        }
+    }
+
+    private func stopEdgeScrollTimer() {
+        edgeScrollTimer?.invalidate()
+        edgeScrollTimer = nil
     }
 
     func endDrag() {
         folderHoverTimer?.invalidate()
         folderHoverTimer = nil
+        stopEdgeScrollTimer()
         guard dragState.isDragging else { return }
 
         let page = dragState.sourcePageIndex

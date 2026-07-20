@@ -13,9 +13,7 @@ struct GridPageView: View {
     let onTapFolder: (FolderInfo) -> Void
     let onLongPress: () -> Void
     let onDeleteApp: ((AppInfo) -> Void)?
-    /// (bundleID, slotIndex, startLocation)
     let onBeginDrag: (String, Int, CGPoint) -> Void
-    /// (nearestSlotIndex, currentLocation)
     let onUpdateDragTarget: (Int, CGPoint) -> Void
     let onEndDrag: () -> Void
     let onDropOnFolder: ((String, UUID) -> Void)?
@@ -61,9 +59,7 @@ struct GridPageView: View {
                         onLongPress: onLongPress,
                         onDelete: app.isMASApp ? { onDeleteApp?(app) } : nil
                     )
-                    // 被拖图标：幽灵占位（原位保持不动）
                     .opacity(isDragged ? 0.2 : 1.0)
-                    // 文件夹创建目标：放大 + 亮圈
                     .scaleEffect(isFolderTarget ? 1.12 : 1.0)
                     .overlay(
                         RoundedRectangle(cornerRadius: 22)
@@ -100,12 +96,17 @@ struct GridPageView: View {
         .background(slotFrameTracker(slotIndex: slotIndex))
     }
 
-    // MARK: - 拖拽手势（格子级别）
+    // MARK: - 拖拽手势
 
     private func cellDragGesture(item: LayoutItem, slotIndex: Int) -> some Gesture {
-        DragGesture(minimumDistance: 5, coordinateSpace: .global)
+        // 用局部 var 追踪是否已初始化拖拽
+        // 不能依赖 dragState.isDragging：闭包捕获的是拖拽开始时的旧 struct，该值永远为 false
+        var hasBegunDrag = false
+
+        return DragGesture(minimumDistance: 5, coordinateSpace: .global)
             .onChanged { value in
-                if !dragState.isDragging {
+                if !hasBegunDrag {
+                    hasBegunDrag = true
                     if case .app(let bundleID) = item {
                         onBeginDrag(bundleID, slotIndex, value.startLocation)
                     }
@@ -115,11 +116,12 @@ struct GridPageView: View {
                 }
             }
             .onEnded { value in
-                if dragState.isDragging,
-                   let targetSlot = nearestSlot(to: value.location),
+                // 检查是否拖到了已有文件夹上
+                if let targetSlot = nearestSlot(to: value.location),
                    targetSlot < items.count,
-                   case .folder(let fid) = items[targetSlot] {
-                    onDropOnFolder?(dragState.draggedBundleID, fid)
+                   case .folder(let fid) = items[targetSlot],
+                   case .app(let bundleID) = item {
+                    onDropOnFolder?(bundleID, fid)
                 } else {
                     onEndDrag()
                 }
