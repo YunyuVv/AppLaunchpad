@@ -1,81 +1,69 @@
 import SwiftUI
 
-/// 启动台全屏根视图：背景 + 搜索框 + 多页翻页 + 页码指示器 + 呼出/关闭动画
+/// 启动台全屏根视图：背景 + 搜索框 + 多页翻页 + 页码指示器 + 呼出动画
 struct LaunchpadView: View {
     @Bindable var viewModel: LaunchpadViewModel
     let onDismiss: () -> Void
 
-    // 呼出动画控制
     @State private var appeared = false
-    // 触控板横向拖拽偏移量
+    // 翻页时的偏移量（由 WindowController 的 scrollWheel 驱动）
     @State private var dragOffsetX: CGFloat = 0
 
-    private var screen: NSScreen { NSScreen.main ?? NSScreen.screens[0] }
-
     var body: some View {
-        ZStack {
-            // ── 背景（纯视觉）
-            BackgroundView()
-                .allowsHitTesting(false)
+        GeometryReader { geo in
+            ZStack {
+                // ── 背景（纯视觉，不拦截点击）
+                BackgroundView()
+                    .allowsHitTesting(false)
 
-            // ── 主体内容
-            VStack(spacing: 0) {
-                // 搜索框
-                SearchBarView(text: $viewModel.searchText)
-                    .padding(.top, 56)
+                // ── 关闭层：放在内容之前（ZStack 中靠下），空白区域点击时触发
+                Color.clear
+                    .contentShape(Rectangle())
+                    .onTapGesture { onDismiss() }
 
-                Spacer()
+                // ── 内容层：放在关闭层之后（ZStack 最上层），自身拦截点击
+                VStack(spacing: 0) {
+                    // 搜索框：自身可交互，阻止点击穿透到关闭层
+                    SearchBarView(text: $viewModel.searchText)
+                        .padding(.top, 56)
+                        .onTapGesture {}   // 吸收点击，防止穿透触发 dismiss
 
-                // 图标区域
-                if viewModel.allApps.isEmpty {
-                    loadingView
-                } else if viewModel.isSearching {
-                    searchResultsView
-                } else {
-                    pagingView
+                    Spacer()
+
+                    if viewModel.allApps.isEmpty {
+                        loadingView
+                    } else if viewModel.isSearching {
+                        searchResultsView(width: geo.size.width)
+                    } else {
+                        pagingView(width: geo.size.width)
+                    }
+
+                    Spacer()
+
+                    if !viewModel.isSearching && viewModel.totalPages > 1 {
+                        PageIndicatorView(
+                            totalPages: viewModel.totalPages,
+                            currentPage: viewModel.currentPageIndex,
+                            onTap: { viewModel.goToPage($0) }
+                        )
+                    } else {
+                        Spacer().frame(height: 46)
+                    }
                 }
-
-                Spacer()
-
-                // 页码指示器（搜索时隐藏）
-                if !viewModel.isSearching && viewModel.totalPages > 1 {
-                    PageIndicatorView(
-                        totalPages: viewModel.totalPages,
-                        currentPage: viewModel.currentPageIndex,
-                        onTap: { viewModel.goToPage($0) }
-                    )
-                } else {
-                    Spacer().frame(height: 46)
-                }
+                // VStack 自身没有背景，空白区域点击会穿透到下层 Color.clear
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        // 呼出动画：整体从缩放+透明淡入
         .scaleEffect(appeared ? 1.0 : 0.92)
         .opacity(appeared ? 1.0 : 0)
         .animation(.spring(duration: 0.35, bounce: 0.15), value: appeared)
         .onAppear { appeared = true }
-        // 空白区域点击关闭
-        .contentShape(Rectangle())
-        .onTapGesture { onDismiss() }
-        // 触控板双指横向滑动翻页
-        .gesture(
-            DragGesture(minimumDistance: 20)
-                .onChanged { value in
-                    guard !viewModel.isSearching else { return }
-                    dragOffsetX = value.translation.width
-                }
-                .onEnded { value in
-                    guard !viewModel.isSearching else { return }
-                    let threshold: CGFloat = 60
-                    if value.translation.width < -threshold {
-                        viewModel.goToNextPage()
-                    } else if value.translation.width > threshold {
-                        viewModel.goToPreviousPage()
-                    }
-                    dragOffsetX = 0
-                }
-        )
+    }
+
+    // MARK: - 供 WindowController 驱动翻页偏移
+
+    func updateDragOffset(_ offset: CGFloat) {
+        dragOffsetX = offset
     }
 
     // MARK: - Subviews
@@ -87,9 +75,8 @@ struct LaunchpadView: View {
             .tint(.white)
     }
 
-    /// 搜索结果页（单页展示匹配项）
-    private var searchResultsView: some View {
-        let cols = viewModel.columnCount(for: screen)
+    private func searchResultsView(width: CGFloat) -> some View {
+        let cols = viewModel.columnCount(for: NSScreen.screens.first ?? NSScreen.screens[0])
         let items = viewModel.searchResults.map { LayoutItem.app(bundleID: $0.bundleID) }
         return Group {
             if items.isEmpty {
@@ -97,43 +84,24 @@ struct LaunchpadView: View {
                     .font(.system(size: 18))
                     .foregroundStyle(.white.opacity(0.6))
             } else {
-                GridPageView(
-                    items: items,
-                    apps: viewModel.allApps,
-                    columns: cols,
-                    onTapApp: { viewModel.launch($0) }
-                )
+                GridPageView(items: items, apps: viewModel.allApps, columns: cols,
+                             onTapApp: { viewModel.launch($0) })
             }
         }
     }
 
-    /// 多页翻页视图（水平 HStack + offset 偏移）
-    private var pagingView: some View {
-        GeometryReader { geo in
-            let pageWidth = geo.size.width
-            HStack(spacing: 0) {
-                ForEach(0..<viewModel.totalPages, id: \.self) { pageIndex in
-                    pageContent(pageIndex: pageIndex)
-                        .frame(width: pageWidth)
-                }
+    private func pagingView(width: CGFloat) -> some View {
+        let cols = viewModel.columnCount(for: NSScreen.screens.first ?? NSScreen.screens[0])
+        return HStack(spacing: 0) {
+            ForEach(0..<viewModel.totalPages, id: \.self) { i in
+                let items = i < viewModel.layout.pages.count ? viewModel.layout.pages[i] : []
+                GridPageView(items: items, apps: viewModel.allApps, columns: cols,
+                             onTapApp: { viewModel.launch($0) })
+                    .frame(width: width)
             }
-            // 通过偏移量实现翻页，加上拖拽中的实时偏移
-            .offset(x: -CGFloat(viewModel.currentPageIndex) * pageWidth + dragOffsetX)
-            .animation(.spring(duration: 0.3, bounce: 0.1), value: viewModel.currentPageIndex)
-            .animation(.interactiveSpring(), value: dragOffsetX)
         }
-    }
-
-    private func pageContent(pageIndex: Int) -> some View {
-        let cols = viewModel.columnCount(for: screen)
-        let items = pageIndex < viewModel.layout.pages.count
-            ? viewModel.layout.pages[pageIndex]
-            : []
-        return GridPageView(
-            items: items,
-            apps: viewModel.allApps,
-            columns: cols,
-            onTapApp: { viewModel.launch($0) }
-        )
+        .offset(x: -CGFloat(viewModel.currentPageIndex) * width + dragOffsetX)
+        .animation(.spring(duration: 0.3, bounce: 0.1), value: viewModel.currentPageIndex)
+        .animation(.interactiveSpring(response: 0.25), value: dragOffsetX)
     }
 }
