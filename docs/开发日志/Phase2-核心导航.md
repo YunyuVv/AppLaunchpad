@@ -120,6 +120,13 @@ HStack(spacing: 0) {
 - `phase != .none` → 触控板手势，累积 delta，松手时判断
 - 增加 300ms 防抖防止连续翻多页
 
+### Bug 6：搜索框无法点击输入
+**原因 A**：`SearchBarView` 加了 `.onTapGesture {}`（空手势）试图阻止点击穿透到关闭层，但空手势同时也吸收了 TextField 的焦点激活事件，导致点击搜索框 TextField 永远不会获得焦点。实际上 `SearchBarView` 的磨砂玻璃背景（`.fill(.ultraThinMaterial)`）本身就是可命中的，点击时不会穿透，`.onTapGesture {}` 完全多余。  
+**修复**：移除 `SearchBarView` 上的 `.onTapGesture {}`。
+
+**原因 B**：键盘监听中方向键（keyCode 123/124）无论是否在搜索模式一律 `return nil`（消耗事件），导致搜索框里光标无法用方向键移动，字符输入也受影响。  
+**修复**：搜索模式下方向键 `return event` 透传给 TextField，仅在非搜索模式下消耗并翻页。
+
 ---
 
 ## 六、待办（TODO）
