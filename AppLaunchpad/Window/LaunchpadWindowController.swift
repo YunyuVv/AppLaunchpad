@@ -10,8 +10,10 @@ final class LaunchpadWindowController {
     private var scrollMonitor: Any?
     private let viewModel: LaunchpadViewModel
 
-    // 累积 scrollWheel 偏移，用于判断翻页方向
+    // 触控板：累积 scrollWheel 偏移
     private var accumulatedScrollX: CGFloat = 0
+    // 防止连续翻页（上次翻页时间）
+    private var lastPageFlipTime: Date = .distantPast
 
     var isVisible: Bool { panel?.isVisible ?? false }
 
@@ -25,9 +27,8 @@ final class LaunchpadWindowController {
         }
         guard let panel else { return }
 
-        // 每次显示都更新到主屏幕（screens.first 始终是主屏幕）
-        let screen = primaryScreen
-        panel.setFrame(screen.frame, display: false)
+        // display: true 强制重绘，确保 SwiftUI 拿到正确的 frame 尺寸
+        panel.setFrame(primaryScreen.frame, display: true)
 
         NSApp.setActivationPolicy(.regular)
         panel.orderFrontRegardless()
@@ -48,7 +49,6 @@ final class LaunchpadWindowController {
 
     // MARK: - 主屏幕
 
-    /// 主屏幕 = screens.first（系统设置中被设为主屏幕的那个，带菜单栏）
     private var primaryScreen: NSScreen {
         NSScreen.screens.first ?? NSScreen.screens[0]
     }
@@ -79,7 +79,7 @@ final class LaunchpadWindowController {
         }
     }
 
-    // MARK: - 触控板双指滑动（scrollWheel）
+    // MARK: - 触控板 + 鼠标滚轮翻页
 
     private func setupScrollMonitor() {
         guard scrollMonitor == nil else { return }
@@ -88,26 +88,37 @@ final class LaunchpadWindowController {
         scrollMonitor = NSEvent.addLocalMonitorForEvents(matching: .scrollWheel) { [weak self] event in
             guard let self, !viewModel.isSearching else { return event }
 
-            // 只处理明显的横向滑动
+            // 只处理以横向为主的滚动
             guard abs(event.scrollingDeltaX) > abs(event.scrollingDeltaY) else { return event }
 
-            if event.phase == .began {
-                accumulatedScrollX = 0
-            }
-
-            accumulatedScrollX += event.scrollingDeltaX
-
-            if event.phase == .ended || event.phase == .cancelled {
-                // 松手：超过阈值则翻页
-                if accumulatedScrollX < -80 {
-                    viewModel.goToNextPage()
-                } else if accumulatedScrollX > 80 {
-                    viewModel.goToPreviousPage()
+            if event.phase == .none && event.momentumPhase == .none {
+                // ── 物理鼠标滚轮：phase 恒为 .none，每个事件独立判断
+                flipPage(deltaX: event.scrollingDeltaX * 3)
+            } else if event.momentumPhase == .none {
+                // ── 触控板手势：累积 delta，松手后判断
+                if event.phase == .began { accumulatedScrollX = 0 }
+                accumulatedScrollX += event.scrollingDeltaX
+                if event.phase == .ended || event.phase == .cancelled {
+                    flipPage(deltaX: accumulatedScrollX)
+                    accumulatedScrollX = 0
                 }
-                accumulatedScrollX = 0
             }
+            // momentum 阶段（惯性）忽略，避免翻多页
 
             return event
+        }
+    }
+
+    /// 根据累积偏移量决定翻页方向，带防抖（300ms 内不重复翻页）
+    private func flipPage(deltaX: CGFloat) {
+        let now = Date()
+        guard now.timeIntervalSince(lastPageFlipTime) > 0.3 else { return }
+        if deltaX < -80 {
+            viewModel.goToNextPage()
+            lastPageFlipTime = now
+        } else if deltaX > 80 {
+            viewModel.goToPreviousPage()
+            lastPageFlipTime = now
         }
     }
 

@@ -14,6 +14,7 @@ struct BackgroundView: View {
                 .ignoresSafeArea()
 
             // 深色半透明遮罩，提升图标和文字的可读性
+            // TODO: Phase 7 设置页面中开放透明度配置（当前固定 0.45）
             Color.black.opacity(0.45)
                 .ignoresSafeArea()
         }
