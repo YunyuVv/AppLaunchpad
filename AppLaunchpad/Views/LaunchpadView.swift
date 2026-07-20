@@ -17,7 +17,7 @@ struct LaunchpadView: View {
         ZStack {
             BackgroundView().allowsHitTesting(false)
 
-            // 关闭/退出编辑/收起文件夹层
+            // 关闭/退出编辑/收起文件夹层，右键弹出上下文菜单
             Color.clear
                 .contentShape(Rectangle())
                 .onTapGesture {
@@ -30,6 +30,15 @@ struct LaunchpadView: View {
                     }
                 }
                 .simultaneousGesture(pagingDragGesture)
+                .contextMenu {
+                    if viewModel.isEditMode {
+                        Button("完成编辑") { viewModel.exitEditMode() }
+                        Divider()
+                    }
+                    Button("设置...") { openSettings() }
+                    Divider()
+                    Button("关闭启动台") { onDismiss() }
+                }
 
             // 内容层
             VStack(spacing: 0) {
@@ -215,11 +224,21 @@ struct LaunchpadView: View {
             )
             .scaleEffect(1.12)
             .shadow(color: .black.opacity(0.35), radius: 12, x: 0, y: 6)
-            .allowsHitTesting(false)   // 不拦截任何交互
-            // position 以图标中心为锚点，放在鼠标位置
+            .allowsHitTesting(false)
             .position(ds.dragLocation)
             .zIndex(999)
             .transition(.opacity)
+        }
+    }
+
+    // MARK: - 辅助
+
+    private func openSettings() {
+        // 关闭面板，激活 App，打开设置窗口
+        onDismiss()
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+            NSApp.activate(ignoringOtherApps: true)
+            NSApp.sendAction(Selector(("showSettingsWindow:")), to: nil, from: nil)
         }
     }
 }
