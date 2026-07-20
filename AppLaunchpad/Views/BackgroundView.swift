@@ -1,57 +1,34 @@
 import SwiftUI
 import AppKit
-import CoreImage.CIFilterBuiltins
 
-/// 虚化壁纸背景；壁纸读取失败时降级为系统 NSVisualEffectView
+/// 全屏背景：使用 NSVisualEffectView 实时模糊窗口后方的当前屏幕内容
+/// 相比读取壁纸文件的优势：
+///   1. 显示的是真实的当前屏幕画面（含其他窗口），而不仅是壁纸
+///   2. 无需屏幕录制权限
+///   3. 硬件加速，性能优于 CIFilter
 struct BackgroundView: View {
-    @State private var blurredWallpaper: NSImage? = nil
-
     var body: some View {
         ZStack {
-            if let img = blurredWallpaper {
-                Image(nsImage: img)
-                    .resizable()
-                    .scaledToFill()
-                    .ignoresSafeArea()
-            } else {
-                VisualEffectView()
-                    .ignoresSafeArea()
-            }
-            Color.black.opacity(0.35)
+            // 系统级实时模糊：自动合成窗口后方的当前画面
+            ScreenBlurView()
+                .ignoresSafeArea()
+
+            // 深色半透明遮罩，提升图标和文字的可读性
+            Color.black.opacity(0.45)
                 .ignoresSafeArea()
         }
-        .task {
-            blurredWallpaper = await makeBlurredWallpaper()
-        }
-    }
-
-    private func makeBlurredWallpaper() async -> NSImage? {
-        guard
-            let screen = NSScreen.main,
-            let wallpaperURL = NSWorkspace.shared.desktopImageURL(for: screen),
-            let ciImage = CIImage(contentsOf: wallpaperURL)
-        else { return nil }
-
-        return await Task.detached(priority: .utility) {
-            let filter = CIFilter.gaussianBlur()
-            filter.inputImage = ciImage
-            filter.radius = 20
-            guard let output = filter.outputImage else { return nil }
-            let ctx = CIContext()
-            guard let cg = ctx.createCGImage(output, from: ciImage.extent) else { return nil }
-            return NSImage(cgImage: cg, size: screen.frame.size)
-        }.value
     }
 }
 
-/// NSVisualEffectView 包装，作为背景降级方案
-private struct VisualEffectView: NSViewRepresentable {
+/// 封装 NSVisualEffectView，behindWindow 模式显示窗口背后的实时模糊内容
+private struct ScreenBlurView: NSViewRepresentable {
     func makeNSView(context: Context) -> NSVisualEffectView {
-        let v = NSVisualEffectView()
-        v.material = .hudWindow
-        v.blendingMode = .behindWindow
-        v.state = .active
-        return v
+        let view = NSVisualEffectView()
+        view.material = .fullScreenUI   // 专为全屏界面设计的材质
+        view.blendingMode = .behindWindow
+        view.state = .active
+        return view
     }
+
     func updateNSView(_ nsView: NSVisualEffectView, context: Context) {}
 }
