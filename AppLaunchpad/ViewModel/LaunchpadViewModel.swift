@@ -19,8 +19,12 @@ final class LaunchpadViewModel {
     var isEditMode: Bool = false
     var dragState: DragState = DragState()
 
-    // 悬停计时器：用于检测拖拽到另一个 App 上 0.7s 后进入文件夹创建模式
-    private var folderHoverTimer: Timer? = nil
+    // 键盘导航选中态
+    var selectedSlotIndex: Int? = nil     // 当前页网格内选中的槽位
+    var selectedSearchIndex: Int? = nil   // 搜索结果中选中的索引
+
+    // 文件夹创建悬停进度计时器：拖到另一 App 上后 0.7s 内递增 folderProgress，满则进入文件夹模式
+    private var folderProgressTimer: Timer? = nil
     // 边缘翻页计时器：拖拽到屏幕边缘时自动翻页
     private var edgeScrollTimer: Timer? = nil
 
@@ -29,21 +33,56 @@ final class LaunchpadViewModel {
 
     // MARK: - 计算属性
 
-    func columnCount(for screen: NSScreen) -> Int {
-        let override = UserPreferences.shared.columnCountOverride
-        if override >= 3 { return override }   // 用户手动指定（3~9）
-        switch screen.frame.width {            // 根据屏幕宽度自动
-        case 1440...: return 7
+    /// 仅按屏幕宽度自动决定的列数（不含用户手动覆盖），供 LaunchpadView 在覆盖值为 0 时调用
+    func autoColumnCount(for screen: NSScreen) -> Int {
+        switch screen.frame.width {                     // 根据屏幕宽度自动，宽屏多列
+        case 2560...: return 12
+        case 1920 ..< 2560: return 9
+        case 1440 ..< 1920: return 7
         case 1280 ..< 1440: return 6
         default: return 5
         }
     }
 
+    /// 仅按屏幕高度自动决定的每页行数（不含用户手动覆盖）
+    func autoRowCount(for screen: NSScreen) -> Int {
+        let h = screen.frame.height
+        switch h {
+        case 1200...: return 6
+        case 900 ..< 1200: return 5
+        default: return 4
+        }
+    }
+
+    /// 每页列数：用户手动覆盖优先，否则按屏幕宽度自动
+    func columnCount(for screen: NSScreen) -> Int {
+        let override = UserPreferences.shared.columnCountOverride
+        return override >= 3 ? min(override, 12) : autoColumnCount(for: screen)
+    }
+
+    /// 每页行数：用户手动覆盖优先，否则按屏幕高度自动
+    func rowCount(for screen: NSScreen) -> Int {
+        let override = UserPreferences.shared.rowCountOverride
+        return override >= 3 ? min(override, 8) : autoRowCount(for: screen)
+    }
+
     var itemsPerPage: Int {
-        columnCount(for: NSScreen.screens.first ?? NSScreen.screens[0]) * 5
+        let screen = NSScreen.screens.first ?? NSScreen.screens[0]
+        return columnCount(for: screen) * rowCount(for: screen)
     }
 
     var totalPages: Int { layout.pages.count }
+
+    /// 当用户调整列数/行数导致 itemsPerPage 变化时，按新密度重新分页。
+    /// 规则：保持所有图标的相对顺序，将当前所有 page 拍平后按新 pageSize 重切。
+    func reflowLayout(to itemsPerPage: Int) {
+        guard itemsPerPage > 0 else { return }
+        let allItems = layout.pages.flatMap { $0 }
+        guard !allItems.isEmpty else { return }
+        layout.pages = allItems.chunked(into: itemsPerPage)
+        currentPageIndex = min(currentPageIndex, max(0, layout.pages.count - 1))
+        saveLayout()
+    }
 
     var searchResults: [AppInfo] {
         guard !searchText.isEmpty else { return [] }
@@ -87,8 +126,7 @@ final class LaunchpadViewModel {
     }
 
     func exitEditMode() {
-        folderHoverTimer?.invalidate()
-        folderHoverTimer = nil
+        stopFolderProgressTimer()
         stopEdgeScrollTimer()
         isEditMode = false
         dragState = DragState()
@@ -114,11 +152,11 @@ final class LaunchpadViewModel {
         dragState.targetSlotIndex = slotIndex
         dragState.dragLocation = location
 
-        // 切换到新槽位时：清除文件夹模式，重启悬停计时器
+        // 切换到新槽位时：重置悬停进度与文件夹模式，重启进度计时器
         if slotIndex != prevSlot {
             dragState.folderTargetID = nil
-            folderHoverTimer?.invalidate()
-            folderHoverTimer = nil
+            dragState.folderProgress = 0
+            stopFolderProgressTimer()
 
             // 检查新槽位是否是另一个 app（原始布局，非预览）
             let page = dragState.sourcePageIndex
@@ -127,19 +165,35 @@ final class LaunchpadViewModel {
                   case .app(let targetID) = layout.pages[page][slotIndex],
                   targetID != dragState.draggedBundleID else { return }
 
-            // 悬停 0.7s 后进入文件夹创建模式
-            folderHoverTimer = Timer.scheduledTimer(withTimeInterval: 0.7, repeats: false) { [weak self] _ in
-                Task { @MainActor [weak self] in
-                    guard let self,
-                          self.dragState.isDragging,
-                          self.dragState.targetSlotIndex == slotIndex else { return }
-                    self.dragState.folderTargetID = targetID
-                }
-            }
+            // 拖到另一 app 上：0.7s 内递增 folderProgress，满则进入文件夹创建模式
+            startFolderProgressTimer(targetID: targetID)
         }
 
         // 边缘翻页检测：拖拽到屏幕左/右边缘时自动翻页
         detectEdgeScroll(location: location)
+    }
+
+    // MARK: - 文件夹创建悬停进度
+
+    private func startFolderProgressTimer(targetID: String) {
+        let step: Double = 0.05
+        let total: Double = 0.7
+        folderProgressTimer = Timer.scheduledTimer(withTimeInterval: step, repeats: true) { [weak self] _ in
+            Task { @MainActor [weak self] in
+                guard let self, self.dragState.isDragging else { return }
+                let p = min(1, self.dragState.folderProgress + step / total)
+                self.dragState.folderProgress = p
+                if p >= 1 {
+                    self.dragState.folderTargetID = targetID
+                    self.stopFolderProgressTimer()
+                }
+            }
+        }
+    }
+
+    private func stopFolderProgressTimer() {
+        folderProgressTimer?.invalidate()
+        folderProgressTimer = nil
     }
 
     private func detectEdgeScroll(location: CGPoint) {
@@ -172,8 +226,7 @@ final class LaunchpadViewModel {
     }
 
     func endDrag() {
-        folderHoverTimer?.invalidate()
-        folderHoverTimer = nil
+        stopFolderProgressTimer()
         stopEdgeScrollTimer()
         guard dragState.isDragging else { return }
 
@@ -243,6 +296,7 @@ final class LaunchpadViewModel {
     }
 
     func launch(_ app: AppInfo) {
+        clearSelection()
         exitEditMode()
         hide()
         NSWorkspace.shared.open(app.url)
@@ -261,6 +315,76 @@ final class LaunchpadViewModel {
         dragState = DragState()
         searchText = ""
         currentPageIndex = 0
+        clearSelection()
+    }
+
+    // MARK: - 键盘导航
+
+    /// 当前页的布局项（用于选中态计算）
+    func currentPageItems() -> [LayoutItem] {
+        currentPageIndex < layout.pages.count ? layout.pages[currentPageIndex] : []
+    }
+
+    /// 网格内移动选中（dx/dy 为方向；横向越界则翻页并把选中移到邻页对应位置）
+    func moveGridSelection(dx: Int, dy: Int, columns: Int) {
+        guard !isSearching else { return }
+        let items = currentPageItems()
+        guard !items.isEmpty else { return }
+        let count = items.count
+        let idx = selectedSlotIndex ?? -1
+        if idx < 0 { selectedSlotIndex = 0; return }
+        let newCol = (idx % columns) + dx
+        let newRow = (idx / columns) + dy
+        if newCol < 0 {
+            guard currentPageIndex > 0 else { return }
+            goToPreviousPage()
+            selectedSlotIndex = columns - 1
+            return
+        }
+        if newCol >= columns {
+            guard currentPageIndex < totalPages - 1 else { return }
+            goToNextPage()
+            selectedSlotIndex = 0
+            return
+        }
+        var newIdx = newRow * columns + newCol
+        newIdx = min(max(newIdx, 0), count - 1)
+        selectedSlotIndex = newIdx
+    }
+
+    /// 搜索结果内移动选中
+    func moveSearchSelection(dx: Int, dy: Int, columns: Int) {
+        guard isSearching else { return }
+        let count = searchResults.count
+        guard count > 0 else { return }
+        let idx = selectedSearchIndex ?? -1
+        if idx < 0 { selectedSearchIndex = 0; return }
+        let newCol = min(max((idx % columns) + dx, 0), columns - 1)
+        var newIdx = ((idx / columns) + dy) * columns + newCol
+        newIdx = min(max(newIdx, 0), count - 1)
+        selectedSearchIndex = newIdx
+    }
+
+    /// 回车：打开当前选中项
+    func activateSelected() {
+        if isSearching {
+            if let i = selectedSearchIndex, i < searchResults.count {
+                launch(searchResults[i])
+            } else if let first = searchResults.first {
+                launch(first)
+            }
+        } else if let idx = selectedSlotIndex,
+                  idx < currentPageItems().count,
+                  case .app(let id) = currentPageItems()[idx],
+                  let app = allApps.first(where: { $0.bundleID == id }) {
+            launch(app)
+        }
+    }
+
+    /// 清除键盘选中态
+    func clearSelection() {
+        selectedSlotIndex = nil
+        selectedSearchIndex = nil
     }
 
     // MARK: - Private
@@ -299,7 +423,19 @@ final class LaunchpadViewModel {
             }
         }
 
-        return LayoutData(pages: pages.isEmpty ? [newItems] : pages, folders: saved.folders)
+        // 清理文件夹内已卸载的 app 引用；引用全部失效则解散该文件夹
+        var folders = saved.folders
+        for (id, var folder) in folders {
+            let kept = folder.appIDs.filter { scannedIDs.contains($0) }
+            if kept.isEmpty {
+                folders.removeValue(forKey: id)
+            } else if kept.count != folder.appIDs.count {
+                folder.appIDs = kept
+                folders[id] = folder
+            }
+        }
+
+        return LayoutData(pages: pages.isEmpty ? [newItems] : pages, folders: folders)
     }
 }
 
@@ -371,5 +507,14 @@ extension LaunchpadViewModel {
         layout.folders[id]?.name = name.isEmpty ? "文件夹" : name
         layout.folders[id]?.isUserNamed = !name.isEmpty
         saveLayout()
+    }
+}
+
+private extension Array {
+    func chunked(into size: Int) -> [[Element]] {
+        guard size > 0 else { return [] }
+        return stride(from: 0, to: count, by: size).map {
+            Array(self[$0..<Swift.min($0 + size, count)])
+        }
     }
 }

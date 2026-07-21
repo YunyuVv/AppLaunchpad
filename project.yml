@@ -11,7 +11,11 @@ settings:
     SWIFT_VERSION: 6.0
     MACOSX_DEPLOYMENT_TARGET: "26.0"
     ENABLE_HARDENED_RUNTIME: YES
-    CODE_SIGN_STYLE: Automatic
+    # 用本机已有的 Apple Development 证书手动签名（非 ad-hoc），
+    # 这样辅助功能等 TCC 权限按证书/Team 绑定，重编译后不再失效。
+    CODE_SIGN_STYLE: Manual
+    CODE_SIGN_IDENTITY: "Apple Development"
+    DEVELOPMENT_TEAM: 2VU69Q9CGK
     PRODUCT_BUNDLE_IDENTIFIER: com.applaunchpad.app
     DEBUG_INFORMATION_FORMAT: dwarf-with-dsym
     SWIFT_STRICT_CONCURRENCY: complete

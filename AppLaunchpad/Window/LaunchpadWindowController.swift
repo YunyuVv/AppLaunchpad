@@ -95,29 +95,70 @@ final class LaunchpadWindowController {
         guard localEventMonitor == nil else { return }
         localEventMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
             guard let self else { return event }
+            let cols = viewModel.columnCount(for: primaryScreen)
             switch event.keyCode {
-            case 53: // Escape：编辑模式 → 退出编辑；搜索中 → 清空；否则 → 关闭面板
+            case 53: // ESC：逐级退出
                 if viewModel.isEditMode {
                     viewModel.exitEditMode()
-                } else if !viewModel.searchText.isEmpty {
-                    viewModel.searchText = ""
+                } else if viewModel.isSearching {
+                    if !viewModel.searchText.isEmpty {
+                        viewModel.searchText = ""
+                        viewModel.clearSelection()
+                    } else {
+                        hide()
+                    }
+                } else if viewModel.selectedSlotIndex != nil || viewModel.selectedSearchIndex != nil {
+                    viewModel.clearSelection()
                 } else {
                     hide()
                 }
                 return nil
-            case 123: // ← 方向键：搜索时透传给 TextField
-                if !viewModel.isSearching {
+            case 36: // Return：打开选中项
+                viewModel.activateSelected()
+                return nil
+            case 123: // ←
+                if viewModel.isSearching {
+                    viewModel.moveSearchSelection(dx: -1, dy: 0, columns: cols)
+                } else if viewModel.selectedSlotIndex != nil {
+                    viewModel.moveGridSelection(dx: -1, dy: 0, columns: cols)
+                } else {
                     withAnimation(.spring(duration: 0.38, bounce: 0.18)) { viewModel.goToPreviousPage() }
-                    return nil
                 }
-                return event
-            case 124: // → 方向键：同上
-                if !viewModel.isSearching {
+                return nil
+            case 124: // →
+                if viewModel.isSearching {
+                    viewModel.moveSearchSelection(dx: 1, dy: 0, columns: cols)
+                } else if viewModel.selectedSlotIndex != nil {
+                    viewModel.moveGridSelection(dx: 1, dy: 0, columns: cols)
+                } else {
                     withAnimation(.spring(duration: 0.38, bounce: 0.18)) { viewModel.goToNextPage() }
+                }
+                return nil
+            case 125: // ↓
+                if viewModel.isSearching { viewModel.moveSearchSelection(dx: 0, dy: 1, columns: cols) }
+                else { viewModel.moveGridSelection(dx: 0, dy: 1, columns: cols) }
+                return nil
+            case 126: // ↑
+                if viewModel.isSearching { viewModel.moveSearchSelection(dx: 0, dy: -1, columns: cols) }
+                else { viewModel.moveGridSelection(dx: 0, dy: -1, columns: cols) }
+                return nil
+            case 51: // ⌫ Delete：删除搜索字符
+                if viewModel.isSearching, !viewModel.searchText.isEmpty {
+                    viewModel.searchText.removeLast()
+                    viewModel.selectedSearchIndex = viewModel.searchText.isEmpty ? nil : 0
+                }
+                return nil
+            default:
+                // 可打印字符：直接进入字母过滤（letter-based search）
+                if let chars = event.characters,
+                   !chars.isEmpty,
+                   !event.modifierFlags.contains(.command),
+                   !event.modifierFlags.contains(.control),
+                   !event.modifierFlags.contains(.option) {
+                    viewModel.searchText += chars
+                    viewModel.selectedSearchIndex = viewModel.searchText.isEmpty ? nil : 0
                     return nil
                 }
-                return event
-            default:
                 return event
             }
         }
@@ -134,7 +175,7 @@ final class LaunchpadWindowController {
 
         scrollMonitor = NSEvent.addLocalMonitorForEvents(matching: .scrollWheel) { [weak self] event in
             guard let self, !viewModel.isSearching else { return event }
-            guard event.momentumPhase == .none else { return event }  // 忽略惯性阶段
+            guard event.momentumPhase.isEmpty else { return event }  // 忽略惯性阶段
 
             if event.hasPreciseScrollingDeltas {
                 // ── 触控板：用 phase 全程累积 x 和 y，只在 .ended 时整体判断方向

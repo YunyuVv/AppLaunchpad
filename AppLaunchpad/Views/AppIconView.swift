@@ -27,7 +27,7 @@ struct AppIconView: View {
                         .animation(.easeOut(duration: 0.12), value: isHovering)
 
                     Text(app.displayName)
-                        .font(.system(size: max(10, iconSize * 0.14)))  // 字体随图标比例缩放
+                        .font(.system(size: min(max(10, iconSize * 0.14), 16)))  // 字体随图标比例缩放，最高 16pt
                         .foregroundStyle(.white)
                         .lineLimit(2)
                         .multilineTextAlignment(.center)

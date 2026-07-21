@@ -7,6 +7,7 @@ struct FolderThumbnailView: View {
     let apps: [AppInfo]
     let iconSize: CGFloat        // 由父级传入
     let isEditMode: Bool
+    let isSelected: Bool
     let onTap: () -> Void
     let onLongPress: () -> Void
 
@@ -47,9 +48,15 @@ struct FolderThumbnailView: View {
                 .frame(width: iconSize, height: iconSize)
             }
             .wobble(isEditMode)
+            .overlay(
+                RoundedRectangle(cornerRadius: iconSize * 0.22)
+                    .strokeBorder(Color.white.opacity(isSelected ? 0.9 : 0), lineWidth: 3)
+                    .frame(width: iconSize + 10, height: iconSize + 10)
+                    .allowsHitTesting(false)
+            )
 
             Text(folder.name)
-                .font(.system(size: max(10, iconSize * 0.14)))
+                .font(.system(size: min(max(10, iconSize * 0.14), 16)))
                 .foregroundStyle(.white)
                 .lineLimit(1)
                 .shadow(color: .black.opacity(0.6), radius: 2, x: 0, y: 1)
