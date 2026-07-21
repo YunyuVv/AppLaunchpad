@@ -12,6 +12,7 @@ struct AppLaunchpadApp: App {
         Window("设置", id: "settings") {
             SettingsView()
         }
+        .defaultLaunchBehavior(.suppressed)   // 启动/重启不自动打开设置窗，仅 ⌘, / 菜单按需打开
         .defaultSize(width: 900, height: 650)
         .defaultPosition(.center)
         .commands {

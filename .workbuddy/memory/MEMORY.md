@@ -17,7 +17,10 @@
 
 - **NSEvent.Phase 是 OptionSet（非 Optional）**：判断"无惯性阶段"用 `event.momentumPhase.isEmpty`，不要用 `== .none`（会被解析成 Optional.none，恒 false）。
 
-- **退出行为约定（UX）**：App 是后台常驻工具（状态栏图标 + 全局快捷键 + 全屏 NSPanel 启动台）。**设置窗口点红叉只关窗、不退出 App**（未实现 `applicationShouldTerminateAfterLastWindowClosed`，系统默认 false）。退出仅通过 `⌘Q` 或状态栏菜单「退出 AppLaunchpad」。左键点 Dock 由 `applicationShouldHandleReopen → toggle()` 呼出/收起启动台（已落地）。后续不要"顺手"给设置窗加退出逻辑，那是预期设计。
+- **退出行为约定（UX）**：App 是后台常驻工具（状态栏图标 + 全局快捷键 + 全屏 NSPanel 启动台）。**设置窗口点红叉只关窗、不退出 App**。
+  - 关键坑：`AppLaunchpadApp.swift` 的 `body` 只有唯一 `Window("设置", id: "settings")` 场景 → SwiftUI 把它当主窗口，①启动会自动打开设置窗；②关掉它按"单一主窗口"逻辑直接退出。
+  - 修复（已落地，BUILD SUCCEEDED）：该 Scene 加 `.defaultLaunchBehavior(.suppressed)`（启动不自动开设置窗，仅 ⌘, / 菜单按需开）；`AppDelegate` 显式实现 `applicationShouldTerminateAfterLastWindowClosed` 返回 `false`（关设置窗不退出）。**默认 false 在单一 `Window(id:)` 场景下拦不住退出，须显式写。**
+  - 退出仅通过 `⌘Q` 或状态栏菜单「退出 AppLaunchpad」。左键点 Dock 由 `applicationShouldHandleReopen → toggle()` 呼出/收起启动台（已落地）。
 
 ## 架构速记
 - 混合 AppKit + SwiftUI：NSPanel 全屏浮层（LaunchpadWindowController），@Observable ViewModel（LaunchpadViewModel，@MainActor）。

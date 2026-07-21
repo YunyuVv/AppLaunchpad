@@ -55,6 +55,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         return false
     }
 
+    // MARK: - 常驻：关窗不退出
+
+    /// 设置窗口是 App 唯一的标准窗口，关闭它不应退出程序（启动台面板是 NSPanel，不在场景系统内）。
+    /// 显式返回 false，确保"保持常驻"——退出仅通过 ⌘Q / 状态栏菜单。
+    func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
+        false
+    }
+
     // MARK: - 窗口层级观察（让 SwiftUI Settings 场景的设置窗口能浮在全屏面板之上）
 
     private func setupWindowObservers() {
