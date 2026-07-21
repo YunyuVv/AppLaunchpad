@@ -17,6 +17,8 @@
 
 - **NSEvent.Phase 是 OptionSet（非 Optional）**：判断"无惯性阶段"用 `event.momentumPhase.isEmpty`，不要用 `== .none`（会被解析成 Optional.none，恒 false）。
 
+- **退出行为约定（UX）**：App 是后台常驻工具（状态栏图标 + 全局快捷键 + 全屏 NSPanel 启动台）。**设置窗口点红叉只关窗、不退出 App**（未实现 `applicationShouldTerminateAfterLastWindowClosed`，系统默认 false）。退出仅通过 `⌘Q` 或状态栏菜单「退出 AppLaunchpad」。左键点 Dock 由 `applicationShouldHandleReopen → toggle()` 呼出/收起启动台（已落地）。后续不要"顺手"给设置窗加退出逻辑，那是预期设计。
+
 ## 架构速记
 - 混合 AppKit + SwiftUI：NSPanel 全屏浮层（LaunchpadWindowController），@Observable ViewModel（LaunchpadViewModel，@MainActor）。
 - 拖拽进度环状态在 DragState.folderProgress；文件夹合并触发条件是 folderTargetID != nil。

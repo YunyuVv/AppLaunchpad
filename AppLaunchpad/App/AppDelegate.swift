@@ -46,6 +46,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         NSApp.sendAction(Selector(("showWindow:")), to: nil, from: nil)
     }
 
+    // MARK: - Dock 点击
+
+    /// 左键点击 Dock 图标时切换启动台显示/收起，与原生 Launchpad 行为一致。
+    /// 返回 false 表示已自行处理，不触发系统默认的窗口恢复行为。
+    func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
+        toggle()
+        return false
+    }
+
     // MARK: - 窗口层级观察（让 SwiftUI Settings 场景的设置窗口能浮在全屏面板之上）
 
     private func setupWindowObservers() {
