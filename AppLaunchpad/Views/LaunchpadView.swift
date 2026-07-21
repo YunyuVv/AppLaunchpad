@@ -26,17 +26,35 @@ struct LaunchpadView: View {
         }
     }
 
+    /// 外观参数为 0 时的自动推算值，按目标屏幕尺寸比例给出，保证不同分辨率下都协调。
+    /// 与 columns/rows/iconSize 的"0 = 自动"约定一致。
+    private func autoHorizontalSpacing() -> CGFloat { max(12, targetScreen.frame.width * 0.018) }
+    private func autoVerticalSpacing()   -> CGFloat { max(16, targetScreen.frame.height * 0.022) }
+    private func autoSidePadding()       -> CGFloat { max(40, targetScreen.frame.width * 0.06) }
+    private func autoTopPadding()        -> CGFloat { max(56, targetScreen.frame.height * 0.07) }
+    private func autoBottomPadding()     -> CGFloat { max(46, targetScreen.frame.height * 0.06) }
+
+    /// 取"有效"间距/边距：用户设为 0 时走自动推算，否则用用户指定值。
+    private func effectiveHorizontalSpacing() -> CGFloat { prefs.horizontalSpacing == 0 ? autoHorizontalSpacing() : CGFloat(prefs.horizontalSpacing) }
+    private func effectiveVerticalSpacing()   -> CGFloat { prefs.verticalSpacing == 0 ? autoVerticalSpacing() : CGFloat(prefs.verticalSpacing) }
+    private func effectiveSidePadding()       -> CGFloat { prefs.sidePadding == 0 ? autoSidePadding() : CGFloat(prefs.sidePadding) }
+    private func effectiveTopPadding()        -> CGFloat { prefs.topPadding == 0 ? autoTopPadding() : CGFloat(prefs.topPadding) }
+    private func effectiveBottomPadding()     -> CGFloat { prefs.bottomPadding == 0 ? autoBottomPadding() : CGFloat(prefs.bottomPadding) }
+
     /// 根据可用内容尺寸计算图标尺寸，让网格在水平/垂直方向都尽量撑满。
     /// 图标最大尺寸可由用户通过「图标最大尺寸」限制；设为 0 时自动撑满。
     private func computeIconSize(contentSize: CGSize, columns: Int, rows: Int) -> CGFloat {
         let cols = CGFloat(columns)
         let rows = CGFloat(rows)
-        let hSpacing = CGFloat(prefs.horizontalSpacing)
-        let vSpacing = CGFloat(prefs.verticalSpacing)
-        let sidePad = CGFloat(prefs.sidePadding)
-        let topPad = CGFloat(prefs.topPadding)
-        let bottomPad = CGFloat(prefs.bottomPadding)
-        let maxIcon = CGFloat(prefs.iconSizeOverride > 0 ? prefs.iconSizeOverride : 1024)
+        let hSpacing = effectiveHorizontalSpacing()
+        let vSpacing = effectiveVerticalSpacing()
+        let sidePad = effectiveSidePadding()
+        let topPad = effectiveTopPadding()
+        let bottomPad = effectiveBottomPadding()
+        // 自动模式下图标尺寸上限：原生 Launchpad 图标约 60~90pt，
+        // 避免大屏/少列数时把图标撑到 130pt+ 显得过大。手动「图标最大尺寸」仍可超过此值。
+        let autoMaxIcon: CGFloat = 96
+        let maxIcon = CGFloat(prefs.iconSizeOverride > 0 ? prefs.iconSizeOverride : autoMaxIcon)
 
         let availW = contentSize.width - 2 * sidePad - hSpacing * (cols - 1)
         let cellW = max(40, availW / cols)
@@ -93,7 +111,7 @@ struct LaunchpadView: View {
 
                 // 内容层：搜索栏置顶，网格占满剩余空间，分页指示器在底部
                 VStack(spacing: 0) {
-                    SearchBarView(text: $viewModel.searchText).padding(.top, prefs.topPadding)
+                    SearchBarView(text: $viewModel.searchText).padding(.top, effectiveTopPadding())
                     contentArea(iconSize: iconSize, cols: cols, rows: rows)
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                     pageIndicatorArea
@@ -209,7 +227,7 @@ struct LaunchpadView: View {
                 Color.clear
             }
         }
-        .frame(height: CGFloat(prefs.bottomPadding))
+        .frame(height: effectiveBottomPadding())
     }
 
     private func searchResultsView(iconSize: CGFloat, cols: Int, rows: Int) -> some View {
@@ -221,7 +239,7 @@ struct LaunchpadView: View {
                 GridPageView(
                     items: items, apps: viewModel.allApps, folders: [:],
                     columns: cols, rows: rows,
-                    hSpacing: CGFloat(prefs.horizontalSpacing), vSpacing: CGFloat(prefs.verticalSpacing),
+                    hSpacing: effectiveHorizontalSpacing(), vSpacing: effectiveVerticalSpacing(),
                     iconSize: iconSize,
                     pageIndex: 0, selectedSlotIndex: viewModel.selectedSearchIndex, isEditMode: false, dragState: DragState(),
                     onTapApp: { viewModel.launch($0) }, onTapFolder: { _ in },
@@ -249,7 +267,7 @@ struct LaunchpadView: View {
             folders: viewModel.layout.folders,
             columns: cols,
             rows: rows,
-            hSpacing: CGFloat(prefs.horizontalSpacing), vSpacing: CGFloat(prefs.verticalSpacing),
+            hSpacing: effectiveHorizontalSpacing(), vSpacing: effectiveVerticalSpacing(),
             iconSize: iconSize,
             pageIndex: pageIdx,
             selectedSlotIndex: viewModel.selectedSlotIndex,

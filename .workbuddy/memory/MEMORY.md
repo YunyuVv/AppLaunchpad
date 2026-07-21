@@ -30,12 +30,15 @@
 ## 设置窗口架构（当前代码状态，已编译验证）
 
 - **使用 `Window("设置", id: "settings")` 场景**（`AppLaunchpadApp.swift`）承载设置窗口。该窗口使用 `NavigationSplitView` + `.listStyle(.sidebar)`，左侧为系统磨砂玻璃 sidebar，右侧 detail 标题栏自动生成系统 sidebar toggle 按钮，窗口标题为"设置"。
-- **入口位置**：App 菜单「设置… / ⌘,」、状态栏菜单、Dock 右键菜单（各含"打开启动台"+"设置…"）统一调 `AppDelegate.openSettings()` → `NSApp.sendAction(Selector(("showWindow:")), to: nil, from: nil)`。
+- **入口位置**：App 菜单「设置… / ⌘,」、状态栏菜单、Dock 右键菜单（各含"打开启动台"+"设置…"）统一调 `AppDelegate.openSettings()` → `settingsOpener` 闭包 → SwiftUI 环境 `openWindow(id: "settings")`。
+  - ⚠️ **打开 `Window(id:)` 场景必须用 `openWindow(id:)`，绝不能用 `showWindow:` 选择器**（`showWindow:` 依赖响应者链，对 SwiftUI 场景不可靠，Dock 菜单等上下文下直接失效）。桥接方式：`AppLaunchpadApp.body` 里 `appDelegate.setSettingsOpener { self.openWindow(id: "settings") }` 把环境动作注入 AppDelegate。
 - 打开设置时，`AppDelegate` 的 `NSWindow.didBecomeKeyNotification` 观察者会把启动台全屏面板降到普通层级；设置窗口关闭后 `NSWindow.willCloseNotification` 恢复面板层级。
 - 不要尝试用 `AppDelegate` 手动创建 `NSWindow + NSHostingController` 来承载 `NavigationSplitView`：SwiftUI 在这种窗口里不会为 `NavigationSplitView` 生成系统工具栏，导致 sidebar toggle 按钮缺失。
 - ⚠️ 备注：`Settings { }` 场景虽然可用 `showSettingsWindow:` 从 AppKit 可靠打开，但会呈现系统 Settings 窗口风格（标题随当前分类变化等），与当前项目采用的普通 `Window` 场景视觉不一致，因此当前代码仍使用 `Window("设置", id: "settings")` 场景。
 
 - 默认采用"自动撑满"策略：由 `LaunchpadView.computeIconSize(contentSize:columns:rows:)` 根据实际内容区域尺寸、行列数、间距/边距计算每个 cell，再预留标签高度后让图标尽可能填满。
-- `iconSizeOverride` 语义为"图标最大尺寸"：0 表示自动撑满，非 0 时作为上限。若用户想要限制大小，调此参数即可；若嫌空白太多，设为 0 即可让图标自动变大。
-- 行、列、间距、边距全部进入 `UserPreferences` 并在 `SettingsView` 外观面板用滑块实时调整；由于 `UserPreferences` 是 `@Observable`，设置面板和启动台界面会同步刷新。
+- `iconSizeOverride` 语义为"图标最大尺寸"：0 表示自动（受 `autoMaxIcon = 96` 上限约束，贴近原生 Launchpad 60~90pt 观感，避免大屏/少列数时撑到 130pt+），非 0 时作为上限（56~200 手动可调）。若用户想要更大，调「图标最大尺寸」滑块即可；若嫌太大，设为 0 即回落到 ≤96pt 自动值。
+- 行、列、间距、边距全部进入 `UserPreferences` 并在 `SettingsView` 外观面板用滑块实时调整；`UserPreferences` 现为**存储属性 + `didSet`/init 写回 UserDefaults**，被 `@Observable` 真正追踪，设置面板与启动台界面（LaunchpadView / BackgroundView）改动即同步刷新。
+- **外观参数"自动"约定一致化**：列数/行数/图标尺寸原本 `0 = 自动`；现**水平/垂直间距、左右/顶部/底部边距也统一为 `0 = 自动`**（默认值改为 0，去掉了原先的 nonZero 钳制）。`0` 时由 `LaunchpadView` 的 `auto*Spacing()/auto*Padding()` 按目标屏幕尺寸比例推算（如水平间距 = 屏宽×0.018）。新增 `UserPreferences.resetAppearanceToDefault()`（布局类归 0=自动、透明度归 0.10）与设置面板「恢复默认外观」按钮。透明度不参与自动、默认 0.10（2026-07-21 由 0.45 改为 0.10）。
+- ⚠️ 坑：曾把 `UserPreferences` 的所有属性写成"计算属性 + 直接读 UserDefaults"，`@Observable` 完全不生效（只追踪存储属性），导致「恢复默认」当前页不刷新、外观滑块不实时变化。务必保持属性为存储属性，持久化放在 `didSet`/`init`，不要退回计算属性。
 - 图标视图（AppIconView / FolderThumbnailView）字体最高限制 16pt，防止图标放大后文字比例失衡。

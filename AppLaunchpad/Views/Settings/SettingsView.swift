@@ -193,6 +193,13 @@ private struct AppearancePane: View {
             }
 
             Section {
+                Button("恢复默认外观") {
+                    prefs.resetAppearanceToDefault()
+                }
+                .controlSize(.small)
+            }
+
+            Section {
                 Text("所有调整会实时反映到启动台界面，可边拖动边看效果。")
                     .font(.caption)
                     .foregroundStyle(.secondary)
@@ -207,7 +214,7 @@ private struct AppearancePane: View {
             HStack {
                 Text(label)
                 Spacer()
-                Text(String(format: "%.0f %@", value.wrappedValue, unit))
+                Text(value.wrappedValue == 0 ? "自动" : String(format: "%.0f %@", value.wrappedValue, unit))
                     .foregroundStyle(.secondary)
                     .monospacedDigit()
             }
@@ -320,13 +327,17 @@ private struct HotkeyPane: View {
                         .controlSize(.small)
                 }
 
-                Button("恢复默认 (⌥空格)") { prefs.resetHotkeyToDefault() }
-                    .controlSize(.small)
+                Button("恢复默认 (⌥空格)") {
+                    prefs.resetHotkeyToDefault()
+                    // 复位后主动重建全局监听，确保新的默认快捷键立即生效（无需整机重启）
+                    (NSApp.delegate as? AppDelegate)?.ensureGlobalHotkey()
+                }
+                .controlSize(.small)
 
                 Button("测试触发") {
-                    // 先重建监听（如有授权后未生效的情况），再直接呼出面板确认链路通畅
+                    // 先重建监听（如有授权后未生效的情况），再明确呼出面板确认链路通畅
                     (NSApp.delegate as? AppDelegate)?.ensureGlobalHotkey()
-                    (NSApp.delegate as? AppDelegate)?.toggle()
+                    (NSApp.delegate as? AppDelegate)?.showLaunchpad()
                 }
                 .controlSize(.small)
 

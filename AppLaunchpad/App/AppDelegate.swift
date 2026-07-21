@@ -42,8 +42,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     @objc private func openSettings() {
-        // 打开 SwiftUI Window 场景（"设置"）
-        NSApp.sendAction(Selector(("showWindow:")), to: nil, from: nil)
+        // 通过 SwiftUI 环境桥接的 openWindow(id:) 打开设置场景，
+        // 而不是 showWindow:（依赖响应者链，对 Window(id:) 场景不可靠）。
+        if let opener = settingsOpener {
+            opener()
+        } else {
+            NSApp.sendAction(Selector(("showWindow:")), to: nil, from: nil)
+        }
+    }
+
+    /// 由 AppLaunchpadApp 在 body 中注入：捕获 SwiftUI 环境的 openWindow 动作，
+    /// 让 AppKit 侧的 Dock / 状态栏菜单能可靠打开设置场景。
+    var settingsOpener: (@MainActor () -> Void)?
+
+    func setSettingsOpener(_ opener: @escaping @MainActor () -> Void) {
+        settingsOpener = opener
     }
 
     // MARK: - Dock 点击
@@ -165,5 +178,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     @objc func toggle() {
         guard let wc = windowController else { return }
         if wc.isVisible { wc.hide() } else { wc.show() }
+    }
+
+    /// 明确呼出启动台（仅当未显示时才 show），供「测试触发」按钮使用，
+    /// 避免 toggle 在启动台已显示时反而收起、造成「按钮没反应」的错觉。
+    func showLaunchpad() {
+        guard let wc = windowController else { return }
+        if !wc.isVisible { wc.show() }
     }
 }
