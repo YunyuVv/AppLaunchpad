@@ -5,13 +5,11 @@ import AppKit
 struct LaunchpadView: View {
     @Bindable var viewModel: LaunchpadViewModel
     let onDismiss: () -> Void
-    let onOpenSettings: () -> Void   // 保留兼容，不再使用外部窗口
 
     @State private var appeared = false
     @State private var dragOffsetX: CGFloat = 0
     @State private var isDragging = false
     @State private var expandedFolder: FolderInfo? = nil
-    @State private var showSettingsOverlay = false
     // 直接观察同一个 UserPreferences 单例：行列数/间距/边距均在此读取，
     // 设置面板拖动滑块时会立即触发本视图重新布局（实时生效）。
     @Bindable private var prefs = UserPreferences.shared
@@ -90,8 +88,6 @@ struct LaunchpadView: View {
                             Button("完成编辑") { viewModel.exitEditMode() }
                             Divider()
                         }
-                        Button("设置...") { openSettings() }
-                        Divider()
                         Button("关闭启动台") { onDismiss() }
                     }
 
@@ -137,11 +133,6 @@ struct LaunchpadView: View {
                         }
                     )
                     .transition(.scale(scale: 0.7).combined(with: .opacity))
-                }
-
-                // 设置浮层（面板内渲染，不依赖外部 NSWindow）
-                if showSettingsOverlay {
-                    settingsOverlay
                 }
 
                 // 拖拽浮动图标：跟随鼠标自由移动，不参与命中检测
@@ -312,67 +303,5 @@ struct LaunchpadView: View {
             .zIndex(999)
             .transition(.opacity)
         }
-    }
-
-    // MARK: - 辅助
-
-    private func openSettings() {
-        withAnimation(.spring(duration: 0.25, bounce: 0.1)) {
-            showSettingsOverlay = true
-        }
-    }
-
-    // MARK: - 设置浮层（面板内渲染，不依赖外部 NSWindow / presentationOptions）
-
-    private var settingsOverlay: some View {
-        GeometryReader { geo in
-            ZStack(alignment: .trailing) {
-                // 轻量遮罩：点击关闭，但保留足够透明度让左侧网格可见，
-                // 这样拖动"每行列数 / 每页行数"滑块时能实时看到布局变化。
-                Color.black.opacity(0.25)
-                    .ignoresSafeArea()
-                    .onTapGesture {
-                        withAnimation(.spring(duration: 0.25)) { showSettingsOverlay = false }
-                    }
-
-                // 设置卡片靠右铺，左侧网格完整可见，便于实时预览行列/间距效果
-                VStack(spacing: 0) {
-                    // 标题栏
-                    HStack {
-                        Text("设置")
-                            .font(.headline)
-                        Spacer()
-                        Button {
-                            withAnimation(.spring(duration: 0.25)) { showSettingsOverlay = false }
-                        } label: {
-                            Image(systemName: "xmark.circle.fill")
-                                .font(.title3)
-                                .foregroundStyle(.secondary)
-                        }
-                        .buttonStyle(.plain)
-                    }
-                    .padding(.horizontal, 20)
-                    .padding(.vertical, 14)
-
-                    Divider()
-
-                    SettingsView()
-                        .frame(height: max(360, geo.size.height - 110))
-                }
-                .frame(width: 540)
-                .background(
-                    RoundedRectangle(cornerRadius: 16)
-                        .fill(.regularMaterial)
-                        .overlay(RoundedRectangle(cornerRadius: 16).strokeBorder(.white.opacity(0.12), lineWidth: 1))
-                )
-                .shadow(color: .black.opacity(0.4), radius: 30, x: 0, y: 10)
-                .contentShape(Rectangle())
-                .onTapGesture {}    // 阻止点击穿透到背景
-                .padding(.trailing, 32)
-                .padding(.vertical, 32)
-            }
-        }
-        .transition(.opacity.combined(with: .scale(scale: 0.95)))
-        .zIndex(500)
     }
 }

@@ -2,9 +2,9 @@ import SwiftUI
 import AppKit
 import ApplicationServices
 
-// MARK: - 菜单项枚举
+// MARK: - 设置分类
 
-enum SettingsSection: String, CaseIterable, Identifiable {
+enum SettingsSection: String, CaseIterable, Identifiable, Hashable, Sendable {
     case appearance = "外观"
     case display    = "显示器"
     case hotkey     = "快捷键"
@@ -22,71 +22,62 @@ enum SettingsSection: String, CaseIterable, Identifiable {
     }
 }
 
-// MARK: - 设置主视图（左右结构）
+// MARK: - 原生设置窗口（⌘, / App 菜单 Settings... 打开）
+// 使用 NavigationSplitView，由 SwiftUI Settings 场景托管窗口，
+// 系统会自动生成标题栏、工具栏和 sidebar toggle 按钮。
 
-/// 左侧菜单 + 右侧内容的双栏设置页面
 struct SettingsView: View {
-    @State private var selected: SettingsSection = .appearance
+    var body: some View {
+        SettingsNavigationContent()
+            .frame(minWidth: 820, idealWidth: 900, minHeight: 600, idealHeight: 650)
+    }
+}
+
+struct SettingsNavigationContent: View {
     @Bindable private var prefs = UserPreferences.shared
+    @State private var selected: SettingsSection? = .appearance
+    @State private var columnVisibility: NavigationSplitViewVisibility = .all
 
     var body: some View {
-        HStack(spacing: 0) {
-            // ── 左侧菜单栏
+        NavigationSplitView(columnVisibility: $columnVisibility) {
             sidebar
-
-            Divider()
-
-            // ── 右侧内容区
-            ScrollView {
-                contentArea
-                    .frame(maxWidth: .infinity)
-            }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .navigationTitle("设置")
+                .navigationSplitViewColumnWidth(min: 180, ideal: 200, max: 260)
+        } detail: {
+            detailPane
+                .navigationTitle(navigationTitle)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
+        .navigationSplitViewStyle(.balanced)
     }
 
-    // MARK: - 左侧菜单
+    private var navigationTitle: String {
+        selected?.rawValue ?? "设置"
+    }
 
     private var sidebar: some View {
-        VStack(alignment: .leading, spacing: 2) {
-            ForEach(SettingsSection.allCases) { section in
-                sidebarItem(section)
+        List(selection: $selected) {
+            Section("常规") {
+                Label("外观", systemImage: SettingsSection.appearance.icon)
+                    .tag(SettingsSection.appearance)
+                Label("显示器", systemImage: SettingsSection.display.icon)
+                    .tag(SettingsSection.display)
             }
-            Spacer()
-        }
-        .padding(.vertical, 12)
-        .padding(.horizontal, 8)
-        .frame(width: 140)
-        .background(Color(nsColor: .windowBackgroundColor).opacity(0.6))
-    }
 
-    private func sidebarItem(_ section: SettingsSection) -> some View {
-        HStack(spacing: 8) {
-            Image(systemName: section.icon)
-                .font(.system(size: 14))
-                .frame(width: 20)
-                .foregroundStyle(selected == section ? .white : .secondary)
-            Text(section.rawValue)
-                .font(.system(size: 13))
-                .foregroundStyle(selected == section ? .white : .primary)
+            Section("高级") {
+                Label("快捷键", systemImage: SettingsSection.hotkey.icon)
+                    .tag(SettingsSection.hotkey)
+                Label("关于", systemImage: SettingsSection.about.icon)
+                    .tag(SettingsSection.about)
+            }
         }
-        .padding(.horizontal, 10)
-        .padding(.vertical, 7)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(
-            RoundedRectangle(cornerRadius: 7)
-                .fill(selected == section ? Color.accentColor : Color.clear)
-        )
-        .contentShape(Rectangle())
-        .onTapGesture { withAnimation(.easeInOut(duration: 0.15)) { selected = section } }
+        .listStyle(.sidebar)
     }
-
-    // MARK: - 右侧内容
 
     @ViewBuilder
-    private var contentArea: some View {
+    private var detailPane: some View {
         switch selected {
-        case .appearance:
+        case .appearance, .none:
             AppearancePane(prefs: prefs)
         case .display:
             DisplayPane(prefs: prefs)
@@ -401,7 +392,7 @@ private struct HotkeyPane: View {
         }
         .onDisappear { recorder.stop() }
         .onChange(of: prefs.hotkeyEnabled) { _, _ in
-            // 开启快捷键时若全局监听未建立（例如授权前启动、授权后才打开开关），立即重建，无需重启
+            // 开启快捷键时若全局监听未建立（例如授权前启动、授权后才打开开关），立即重建，无需整机重启
             (NSApp.delegate as? AppDelegate)?.ensureGlobalHotkey()
         }
     }

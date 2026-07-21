@@ -38,6 +38,7 @@ final class LaunchpadWindowController {
         guard let panel else { return }
 
         panel.setFrame(primaryScreen.frame, display: true)
+        restorePanelLevel()  // 确保每次呼出都在最高层级
 
         // 呼出时隐藏 Dock + 菜单栏，与原生 Launchpad 一致
         NSApp.presentationOptions = [.hideDock, .autoHideMenuBar]
@@ -58,21 +59,23 @@ final class LaunchpadWindowController {
     }
 
     private let highLevel = NSWindow.Level(rawValue: Int(CGWindowLevelForKey(.screenSaverWindow)) - 1)
+    private var loweredForSettings = false
 
-    /// 打开设置前降低面板层级，让设置窗口浮在上方
+    var isPanelLowered: Bool { loweredForSettings }
+    var hostWindow: NSWindow? { panel }
+
+    /// 打开设置前降低面板层级，让原生设置窗口浮在上方
     func lowerPanelForSettings() {
+        guard !loweredForSettings else { return }
         panel?.level = NSWindow.Level(rawValue: Int(CGWindowLevelForKey(.normalWindow)))
+        loweredForSettings = true
     }
 
     /// 设置窗口关闭后恢复面板层级
     func restorePanelLevel() {
+        guard loweredForSettings else { return }
         panel?.level = highLevel
-    }
-
-    // 供 LaunchpadView 右键菜单调用（转发到 AppDelegate）
-    func openSettings() {
-        // 直接通过 AppDelegate 打开，确保走统一入口
-        (NSApp.delegate as? AppDelegate)?.showSettings()
+        loweredForSettings = false
     }
 
     // MARK: - 主屏幕
@@ -259,8 +262,7 @@ final class LaunchpadWindowController {
 
         let rootView = LaunchpadView(
             viewModel: viewModel,
-            onDismiss: { [weak self] in self?.hide() },
-            onOpenSettings: { [weak self] in self?.openSettings() }
+            onDismiss: { [weak self] in self?.hide() }
         )
         p.contentView = NSHostingView(rootView: rootView)
         return p

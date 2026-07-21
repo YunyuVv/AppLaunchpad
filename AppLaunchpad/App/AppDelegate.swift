@@ -10,9 +10,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var statusItem: NSStatusItem?
     private var fsWatcher: FSEventsWatcher?
 
-    // 直接持有设置窗口，不依赖 sendAction 响应链
-    private var settingsWindow: NSWindow?
-
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.regular)
 
@@ -22,6 +19,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         setupStatusItem()
         setupGlobalHotkey()
+        setupWindowObservers()
 
         Task {
             await vm.loadApps()
@@ -34,57 +32,57 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         Task { await fsWatcher?.stop() }
     }
 
-    // MARK: - Dock 图标点击
+    // MARK: - Dock 菜单
 
-    func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows: Bool) -> Bool {
-        toggle()
-        return false
+    func applicationDockMenu(_ sender: NSApplication) -> NSMenu? {
+        let menu = NSMenu()
+        menu.addItem(withTitle: "打开启动台", action: #selector(toggle), keyEquivalent: "").target = self
+        menu.addItem(withTitle: "设置…", action: #selector(openSettings), keyEquivalent: "").target = self
+        return menu
     }
 
-    // MARK: - 设置窗口（直接创建，不走 sendAction）
+    @objc private func openSettings() {
+        // 打开 SwiftUI Window 场景（"设置"）
+        NSApp.sendAction(Selector(("showWindow:")), to: nil, from: nil)
+    }
 
-    func showSettings() {
-        if let existing = settingsWindow, existing.isVisible {
-            existing.makeKeyAndOrderFront(nil)
-            NSApp.activate(ignoringOtherApps: true)
-            return
-        }
+    // MARK: - 窗口层级观察（让 SwiftUI Settings 场景的设置窗口能浮在全屏面板之上）
 
-        // 先清除全屏展示选项（hideDock/autoHideMenuBar 会阻止普通窗口浮现）
-        NSApp.presentationOptions = []
-
-        // 把面板层级降到 normal，让设置窗口可以浮在它上面
-        windowController?.lowerPanelForSettings()
-
-        let controller = NSHostingController(rootView: SettingsView())
-        let window = NSWindow(contentViewController: controller)
-        window.title = "AppLaunchpad 设置"
-        window.styleMask = [.titled, .closable, .miniaturizable]
-        window.setContentSize(NSSize(width: 420, height: 300))
-        window.center()
-        window.isReleasedWhenClosed = false
-        // 显式设置 .floating 层级（3），高于降低后的面板（0），确保浮在上方
-        window.level = .floating
-        settingsWindow = window
-
-        // 窗口关闭时恢复面板层级和展示选项
+    private func setupWindowObservers() {
         NotificationCenter.default.addObserver(
-            forName: NSWindow.willCloseNotification,
-            object: window,
-            queue: .main
-        ) { [weak self] _ in
-            Task { @MainActor in
-                self?.windowController?.restorePanelLevel()
-                // 如果面板还在显示，重新隐藏 Dock/菜单栏
-                if self?.windowController?.isVisible == true {
-                    NSApp.presentationOptions = [.hideDock, .autoHideMenuBar]
-                }
-            }
-        }
+            self,
+            selector: #selector(windowDidBecomeKey(_:)),
+            name: NSWindow.didBecomeKeyNotification,
+            object: nil
+        )
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(windowWillClose(_:)),
+            name: NSWindow.willCloseNotification,
+            object: nil
+        )
+    }
 
-        NSApp.setActivationPolicy(.regular)
-        NSApp.activate(ignoringOtherApps: true)
+    /// 当面板可见时，任何非面板窗口成为 key（例如原生 Settings 窗口），都要把面板降到普通层级，
+    /// 否则高层级面板会把设置窗口挡在背后看不见。
+    @objc private func windowDidBecomeKey(_ notification: Notification) {
+        guard let window = notification.object as? NSWindow,
+              let wc = windowController,
+              window != wc.hostWindow,
+              wc.isVisible,
+              !wc.isPanelLowered else { return }
+        wc.lowerPanelForSettings()
         window.makeKeyAndOrderFront(nil)
+    }
+
+    /// 非面板窗口关闭后，把面板恢复回 screenSaver-1 层级，继续当启动台用。
+    @objc private func windowWillClose(_ notification: Notification) {
+        guard let window = notification.object as? NSWindow,
+              let wc = windowController,
+              window != wc.hostWindow,
+              wc.isPanelLowered,
+              wc.isVisible else { return }
+        wc.restorePanelLevel()
     }
 
     // MARK: - FSEvents
@@ -137,6 +135,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         let menu = NSMenu()
         menu.addItem(withTitle: "打开启动台", action: #selector(toggle), keyEquivalent: "").target = self
+        menu.addItem(withTitle: "设置…", action: #selector(openSettings), keyEquivalent: "").target = self
         menu.addItem(.separator())
         menu.addItem(withTitle: "退出 AppLaunchpad", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
 
