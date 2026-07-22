@@ -1,44 +1,42 @@
 # AppLaunchpad 长期记忆
 
-## 项目关键约定 / 坑
+## 关键约定 / 坑
 
-- **Swift 6 成员初始化器不包含带默认值的存储属性。** 本项目（Xcode 26.2 / Swift 6 / SWIFT_STRICT_CONCURRENCY: complete）下，结构体若给某个存储属性写了默认值（如 `let x: Int = 0`），其自动 memberwise initializer 中**不会**暴露该参数。调用方若传这个参数会报 `extra argument 'x' in call`。
-  - 复现：`struct S { let a: Int; let b: Int = 0 }; S(a:1, b:2)` → 编译失败。
-  - 解决：要么去掉默认值（变必填），要么显式写 `init(...)`。
-  - 曾因此误判为 ModuleCache 缓存过期，实际根因在此。改代码即可，清缓存无效。
-
-- **构建命令（稳定签名，重要！）**：
-  `xcodebuild -project AppLaunchpad.xcodeproj -scheme AppLaunchpad -configuration Debug clean build`
-  **不要再带 `CODE_SIGN_IDENTITY=- AD_HOC_CODE_SIGNING_ALLOWED=YES`** —— 那是 ad-hoc 签名，会让辅助功能等 TCC 权限每次重编译都失效。
-  `project.yml` 已固化 `CODE_SIGN_STYLE: Manual` + `CODE_SIGN_IDENTITY: "Apple Development"` + `DEVELOPMENT_TEAM: 2VU69Q9CGK`（用本机已有的 Apple Development 证书，指纹 `F4171D2397EFE92485DB3B20C38456DDB0DB0A62`）。
-  项目用 xcodegen 从 `project.yml` 生成 xcodeproj（改 project.yml 后需 `xcodegen generate`）。
-
-- **TCC / 签名坑**：ad-hoc 签名的 designated requirement 含二进制哈希，重编译即变 → 辅助功能等权限失效。Apple Development 证书签名只绑 identifier + 证书 CN，稳定。若辅助功能"已开但 App 显示未授权"，多半是旧 ad-hoc 授权记录残留，执行 `tccutil reset Accessibility com.applaunchpad.app` 后用新签名 App 重新授权一次即可（之后持久）。
-
-- **NSEvent.Phase 是 OptionSet（非 Optional）**：判断"无惯性阶段"用 `event.momentumPhase.isEmpty`，不要用 `== .none`（会被解析成 Optional.none，恒 false）。
-
-- **退出行为约定（UX）**：App 是后台常驻工具（状态栏图标 + 全局快捷键 + 全屏 NSPanel 启动台）。**设置窗口点红叉只关窗、不退出 App**。
-  - 关键坑：`AppLaunchpadApp.swift` 的 `body` 只有唯一 `Window("设置", id: "settings")` 场景 → SwiftUI 把它当主窗口，①启动会自动打开设置窗；②关掉它按"单一主窗口"逻辑直接退出。
-  - 修复（已落地，BUILD SUCCEEDED）：该 Scene 加 `.defaultLaunchBehavior(.suppressed)`（启动不自动开设置窗，仅 ⌘, / 菜单按需开）；`AppDelegate` 显式实现 `applicationShouldTerminateAfterLastWindowClosed` 返回 `false`（关设置窗不退出）。**默认 false 在单一 `Window(id:)` 场景下拦不住退出，须显式写。**
-  - 退出仅通过 `⌘Q` 或状态栏菜单「退出 AppLaunchpad」。左键点 Dock 由 `applicationShouldHandleReopen → toggle()` 呼出/收起启动台（已落地）。
+- **Swift 6 成员初始化器不含带默认值的存储属性**：`struct S { let a: Int; let b: Int = 0 }` → `S(a:1,b:2)` 编译失败。解决：去默认值或显式写 `init`。曾误判为 ModuleCache 过期，清缓存无效。
+- **构建命令**：`xcodebuild -project AppLaunchpad.xcodeproj -scheme AppLaunchpad -configuration Debug clean build`。**不要**带 `CODE_SIGN_IDENTITY=- AD_HOC_CODE_SIGNING_ALLOWED=YES`（ad-hoc 签名让 TCC 权限每次重编译失效）。`project.yml` 固化 Manual + Apple Development + TEAM `2VU69Q9CGK`（证书指纹 `F4171D2397EFE92485DB3B20C38456DDB0DB0A62`）。改 `project.yml` 后需 `xcodegen generate`。
+- **TCC**：ad-hoc designated requirement 含二进制哈希，重编译即变 → 辅助功能等权限失效。Apple Development 证书只绑 identifier + 证书 CN，稳定。残留授权用 `tccutil reset Accessibility com.applaunchpad.app` 清后重新授权一次即持久。
+- **NSEvent.Phase 是 OptionSet**：判「无惯性阶段」用 `event.momentumPhase.isEmpty`，非 `== .none`（会被解析成 Optional.none 恒 false）。
+- **退出行为**：后台常驻工具（状态栏 + 全局热键 + 全屏 NSPanel）。**设置窗点红叉只关窗不退出**：`AppLaunchpadApp.swift` 的 `Window("设置",id:)` 加 `.defaultLaunchBehavior(.suppressed)`；`AppDelegate` 显式实现 `applicationShouldTerminateAfterLastWindowClosed` 返回 `false`（默认 false 在单一 Window 场景拦不住）。退出仅 ⌘Q / 状态栏菜单；Dock 左键 → `applicationShouldHandleReopen → toggle()`。
 
 ## 架构速记
-- 混合 AppKit + SwiftUI：NSPanel 全屏浮层（LaunchpadWindowController），@Observable ViewModel（LaunchpadViewModel，@MainActor）。
-- 拖拽进度环状态在 DragState.folderProgress；文件夹合并触发条件是 folderTargetID != nil。
-- 全局热键在 AppDelegate.setupGlobalHotkey 用 NSEvent.addGlobalMonitorForEvents 监听 keyCode + modifier。
+- 混合 AppKit + SwiftUI：NSPanel 全屏浮层（LaunchpadWindowController），@Observable ViewModel（LaunchpadViewModel @MainActor）。
+- 全局热键：`NSEvent.addGlobalMonitorForEvents`（keyCode + modifier）。
 
-## 设置窗口架构（当前代码状态，已编译验证）
+## 设置窗口架构
+- `Window("设置", id:"settings")` + `NavigationSplitView` + `.listStyle(.sidebar)`，左侧系统磨砂 sidebar，右侧 detail 自动生成 sidebar toggle，标题「设置」。
+- 入口：菜单 / 状态栏 / Dock 右键菜单 → `AppDelegate.openSettings()` → `settingsOpener` 闭包 → `openWindow(id:)`。**必须用 `openWindow(id:)`，绝不用 `showWindow:`**（响应者链对 SwiftUI 场景不可靠，Dock 菜单下直接失效）。AppDelegate 经 `appDelegate.setSettingsOpener { self.openWindow(id:"settings") }` 注入。
+- 打开设置时 `NSWindow.didBecomeKeyNotification` 把启动台面板降层级；关闭后 `willCloseNotification` 恢复。勿用手动 `NSWindow+NSHostingController` 承载 `NavigationSplitView`（SwiftUI 不会生成系统 toolbar 的 sidebar toggle）。
+- 外观：列/行/间距/边距/图标尺寸全进 `UserPreferences`，滑杆实时调整。`UserPreferences` 必须**存储属性 + didSet/init 写回 UserDefaults**（曾误写成计算属性 → `@Observable` 完全失效）。列/行/图标尺寸/水平垂直间距/四边距统一 `0=自动`，0 时由 `LaunchpadView.auto*Spacing()/auto*Padding()` 按屏比例推算；`resetAppearanceToDefault()` 归 0 / 透明度 0.10（2026-07-21 由 0.45 改）。图标字体 ≤16pt。
 
-- **使用 `Window("设置", id: "settings")` 场景**（`AppLaunchpadApp.swift`）承载设置窗口。该窗口使用 `NavigationSplitView` + `.listStyle(.sidebar)`，左侧为系统磨砂玻璃 sidebar，右侧 detail 标题栏自动生成系统 sidebar toggle 按钮，窗口标题为"设置"。
-- **入口位置**：App 菜单「设置… / ⌘,」、状态栏菜单、Dock 右键菜单（各含"打开启动台"+"设置…"）统一调 `AppDelegate.openSettings()` → `settingsOpener` 闭包 → SwiftUI 环境 `openWindow(id: "settings")`。
-  - ⚠️ **打开 `Window(id:)` 场景必须用 `openWindow(id:)`，绝不能用 `showWindow:` 选择器**（`showWindow:` 依赖响应者链，对 SwiftUI 场景不可靠，Dock 菜单等上下文下直接失效）。桥接方式：`AppLaunchpadApp.body` 里 `appDelegate.setSettingsOpener { self.openWindow(id: "settings") }` 把环境动作注入 AppDelegate。
-- 打开设置时，`AppDelegate` 的 `NSWindow.didBecomeKeyNotification` 观察者会把启动台全屏面板降到普通层级；设置窗口关闭后 `NSWindow.willCloseNotification` 恢复面板层级。
-- 不要尝试用 `AppDelegate` 手动创建 `NSWindow + NSHostingController` 来承载 `NavigationSplitView`：SwiftUI 在这种窗口里不会为 `NavigationSplitView` 生成系统工具栏，导致 sidebar toggle 按钮缺失。
-- ⚠️ 备注：`Settings { }` 场景虽然可用 `showSettingsWindow:` 从 AppKit 可靠打开，但会呈现系统 Settings 窗口风格（标题随当前分类变化等），与当前项目采用的普通 `Window` 场景视觉不一致，因此当前代码仍使用 `Window("设置", id: "settings")` 场景。
+## 拖拽排序链路（2026-07-21）
+- 「直接拖动即进编辑」：`AppIconView`/`FolderThumbnailView` 上挂常驻 `.highPriorityGesture`（minDistance 5），`onChanged` 首帧无编辑态先 `onLongPress()` 进编辑再 `onBeginDrag`。
+- **手势竞争**：Button 上不可加 `DragGesture(minimumDistance:0)` 拿按压态（与 `onLongPressGesture` 抢识别）。按压态用 `onLongPressGesture` 的 `onPressingChanged: isPressed = pressing && !isEditMode`。
+- **拖拽手势必须 `.highPriorityGesture` 且宿主在 `GridPageView` 容器**（`.simultaneousGesture(gridDragGesture())`），据 `startLocation` 查 `slotFrames` 找起点 app，拖动查最近槽位，松手按 `currentPageIndex` 落点；`pagingDragGesture` 加 `!dragState.isDragging` 防竞争。**把拖拽手势挂回单个 app 视图会复现跨页卡死，勿改。**（早期修法「翻页加 `.id(currentPageIndex)` 去掉」已被推翻，真正根因是手势宿主位置。）
+- 编辑态左上角 X 已移除（仅 FolderExpandedView 保留真实删除）。Folder 不参与网格拖拽（只点击打开 / 长按进编辑）。
+- **Timer 必须加 `.common`**：文件夹创建(0.7s)/边缘翻页(0.8s) 的 Timer 在拖拽中 AppKit 切 `NSEventTrackingRunLoopMode`，`Timer.scheduledTimer` 默认 `.default` 不 fire → 功能失效。改用 `Timer(timeInterval:)+RunLoop.main.add(...,forMode:.common)`（`LaunchpadViewModel.startFolderProgressTimer/startEdgeScrollTimer`）。任何「拖拽/手势/滚动期间靠计时器触发」的逻辑都须加 `.common`。
+- **键盘吞字**：`LaunchpadWindowController.keyDown` 任意可打印字符追加 `searchText` 前先 `isTextInputFirstResponder()` 放行 TextField（SwiftUI 可输入控件须靠此放行）。
 
-- 默认采用"自动撑满"策略：由 `LaunchpadView.computeIconSize(contentSize:columns:rows:)` 根据实际内容区域尺寸、行列数、间距/边距计算每个 cell，再预留标签高度后让图标尽可能填满。
-- `iconSizeOverride` 语义为"图标最大尺寸"：0 表示自动（受 `autoMaxIcon = 96` 上限约束，贴近原生 Launchpad 60~90pt 观感，避免大屏/少列数时撑到 130pt+），非 0 时作为上限（56~200 手动可调）。若用户想要更大，调「图标最大尺寸」滑块即可；若嫌太大，设为 0 即回落到 ≤96pt 自动值。
-- 行、列、间距、边距全部进入 `UserPreferences` 并在 `SettingsView` 外观面板用滑块实时调整；`UserPreferences` 现为**存储属性 + `didSet`/init 写回 UserDefaults**，被 `@Observable` 真正追踪，设置面板与启动台界面（LaunchpadView / BackgroundView）改动即同步刷新。
-- **外观参数"自动"约定一致化**：列数/行数/图标尺寸原本 `0 = 自动`；现**水平/垂直间距、左右/顶部/底部边距也统一为 `0 = 自动`**（默认值改为 0，去掉了原先的 nonZero 钳制）。`0` 时由 `LaunchpadView` 的 `auto*Spacing()/auto*Padding()` 按目标屏幕尺寸比例推算（如水平间距 = 屏宽×0.018）。新增 `UserPreferences.resetAppearanceToDefault()`（布局类归 0=自动、透明度归 0.10）与设置面板「恢复默认外观」按钮。透明度不参与自动、默认 0.10（2026-07-21 由 0.45 改为 0.10）。
-- ⚠️ 坑：曾把 `UserPreferences` 的所有属性写成"计算属性 + 直接读 UserDefaults"，`@Observable` 完全不生效（只追踪存储属性），导致「恢复默认」当前页不刷新、外观滑块不实时变化。务必保持属性为存储属性，持久化放在 `didSet`/`init`，不要退回计算属性。
-- 图标视图（AppIconView / FolderThumbnailView）字体最高限制 16pt，防止图标放大后文字比例失衡。
+## 文件夹行为（2026-07-21）
+- 内 app 从左上角：`LazyVGrid(alignment:.leading)`（非 `.topLeading`，那是两轴 `Alignment` 会编译错）。`FolderExpandedView` 内 `highPriorityGesture(folderDragGesture)`，复用同一 `DragState` 状态机 + `floatingDragIcon`；松手在 `folderGlobalFrame` 外则 `moveAppOutOfFolder`，否则 `commitFolderReorder`。`FolderSlotFrameKey` 收集 cell 坐标。重命名内联编辑 → `renameFolder`。
+- 缩略图：`FolderThumbnailView` 3×3 `LazyVGrid(alignment:.leading)` + frame `.topLeading`。
+- 编辑态不晃动（`WobbleModifier.swift` 保留不删，便于恢复）。
+
+## 跨页拖拽卡死根因（2026-07-21，关键）
+- 手势宿主必须比被切换的页面内容更稳定。把网格拖拽手势挂在单个 `AppIconView` 或 `GridPageView`（会因 items 变化被重建）→ 进行中的 `DragGesture` 随视图销毁而取消 → 「拖到第二页卡死、浮动图标冻结」。
+- 最终解：手势放到 `LaunchpadView` body 最外层 `ZStack`（`.simultaneousGesture(globalDragGesture())`），该视图身份在启动台显示期间绝对稳定。`GridPageView` 只负责渲染 + 收集 `slotFrames`，不再处理拖拽。`globalDragGesture` 按 `startLocation` 判起点 app，空白/文件夹则忽略让 `pagingDragGesture` 翻页。`flipPageWhileDragging` 只切 `currentPageIndex`（不搬移 app）；`endDrag` 从 `sourcePageIndex` 移除、插入 `currentPageIndex` 目标槽位并修正同页移除后索引偏移。
+
+## 数据存储架构（2026-07-21 确认）
+- 布局：`LayoutStore`（`actor`）+ `JSONEncoder/Decoder` 原子写 `~/Library/Application Support/AppLaunchpad/layout.json`，全量快照（`LayoutData`：分页 `[[LayoutItem]]` + `folders:[UUID:FolderInfo]`）。
+- 偏好：`UserPreferences`（`@Observable`）存储属性 `didSet` 写 `UserDefaults.standard`。
+- App 信息不持久化，运行时扫码只存 bundleID 引用。
+- SwiftData 评估：部署目标 macOS 26 满足最低 14，但不推荐迁移——`LayoutItem` 是带关联值枚举（SwiftData 无法原生持久化）、嵌套数组+字典需拆实体图、当前全 struct 需改 class @Model；布局本质是「全量有序快照」，JSON 最契合。仅当大量独立可查询记录或文件夹套文件夹时才划算；结构化查询优先 GRDB 而非 SwiftData。

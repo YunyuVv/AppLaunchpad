@@ -72,3 +72,6 @@ AuthKey_*.p8
 .agents/
 .claude/skills/
 skills-lock.json
+
+
+references

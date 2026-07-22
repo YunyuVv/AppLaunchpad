@@ -98,6 +98,11 @@ final class LaunchpadWindowController {
         guard localEventMonitor == nil else { return }
         localEventMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
             guard let self else { return event }
+            // 若启动台内已有 SwiftUI TextField（如文件夹重命名）获得焦点，
+            // 所有按键交还给该输入框处理（否则会被下方逻辑吞掉去触发搜索）。
+            if self.isTextInputFirstResponder() {
+                return event
+            }
             let cols = viewModel.columnCount(for: primaryScreen)
             switch event.keyCode {
             case 53: // ESC：逐级退出
@@ -171,13 +176,26 @@ final class LaunchpadWindowController {
 
     private var scrollDebounceTimer: Timer?
 
+    // MARK: - 文本输入焦点判断
+
+    /// 判断当前窗口 firstResponder 是否为 SwiftUI TextField（字段编辑器 NSText，
+    /// 或 NSTextField）。文件夹重命名等内联输入框聚焦时命中，此时应放行按键。
+    private func isTextInputFirstResponder() -> Bool {
+        guard let responder = panel?.firstResponder else { return false }
+        return responder is NSText || responder is NSTextField
+    }
+
     private func setupScrollMonitor() {
         guard scrollMonitor == nil else { return }
         accumulatedScrollX = 0
         accumulatedScrollY = 0
 
         scrollMonitor = NSEvent.addLocalMonitorForEvents(matching: .scrollWheel) { [weak self] event in
-            guard let self, !viewModel.isSearching else { return event }
+            // 拖拽中 / 编辑态下禁用滚轮翻页：避免拖到其他页时滚动额外翻页干扰落点（冲突 C3）
+            guard let self,
+                  !viewModel.isSearching,
+                  !viewModel.dragState.isDragging,
+                  !viewModel.isEditMode else { return event }
             guard event.momentumPhase.isEmpty else { return event }  // 忽略惯性阶段
 
             if event.hasPreciseScrollingDeltas {

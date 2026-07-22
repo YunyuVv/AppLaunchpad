@@ -29,6 +29,7 @@ struct FolderThumbnailView: View {
 
                 LazyVGrid(
                     columns: Array(repeating: GridItem(.fixed(smallIconSize), spacing: 3), count: 3),
+                    alignment: .leading,
                     spacing: 3
                 ) {
                     ForEach(gridApps, id: \.id) { app in
@@ -45,9 +46,8 @@ struct FolderThumbnailView: View {
                     }
                 }
                 .padding(iconSize * 0.11)
-                .frame(width: iconSize, height: iconSize)
+                .frame(width: iconSize, height: iconSize, alignment: .topLeading)
             }
-            .wobble(isEditMode)
             .overlay(
                 RoundedRectangle(cornerRadius: iconSize * 0.22)
                     .strokeBorder(Color.white.opacity(isSelected ? 0.9 : 0), lineWidth: 3)

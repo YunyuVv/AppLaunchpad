@@ -8,6 +8,7 @@ struct AppIconView: View {
     let isEditMode: Bool
     let onTap: () -> Void
     let onLongPress: () -> Void
+    /// 删除回调（可选）。启动台网格不传（不显示 X）；文件夹展开视图传入以移除文件夹内 app。
     let onDelete: (() -> Void)?
 
     @State private var icon: NSImage? = nil
@@ -37,20 +38,26 @@ struct AppIconView: View {
                 .opacity(isPressed && !isEditMode ? 0.8 : 1.0)
             }
             .buttonStyle(.plain)
+            .focusable(false)
             .onHover { isHovering = $0 }
-            .simultaneousGesture(
-                DragGesture(minimumDistance: 0)
-                    .onChanged { _ in if !isEditMode { isPressed = true } }
-                    .onEnded { _ in isPressed = false }
+            // 用长按手势的按压态驱动按压缩放，避免额外的 DragGesture(minimumDistance:0)
+            // 与 onLongPressGesture 抢识别（那是之前长按进编辑模式不稳定的根因）。
+            // 用 pressing && !isEditMode 防止长按触发 enterEditMode 后图标卡在缩小态。
+            .onLongPressGesture(
+                minimumDuration: 0.5,
+                maximumDistance: 100,
+                perform: { onLongPress() },
+                onPressingChanged: { pressing in
+                    isPressed = pressing && !isEditMode
+                }
             )
-            .onLongPressGesture(minimumDuration: 0.5, maximumDistance: 100) { onLongPress() }
-            .wobble(isEditMode)
             .task(id: app.id) {
                 icon = await IconCache.shared.icon(for: app)
             }
             .animation(.easeIn(duration: 0.15), value: icon != nil)
+            .animation(.spring(duration: 0.2), value: isEditMode)
 
-            // MAS 应用删除按钮
+            // 删除按钮（仅当传入 onDelete 时显示，例如文件夹展开视图移除 app）
             if isEditMode, let onDelete {
                 Button(action: onDelete) {
                     Image(systemName: "xmark.circle.fill")

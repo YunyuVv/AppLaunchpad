@@ -14,16 +14,14 @@ struct GridPageView: View {
     let selectedSlotIndex: Int?          // 键盘导航选中态（nil = 无选中）
     let isEditMode: Bool
     let dragState: DragState
+    let viewModel: LaunchpadViewModel
     let onTapApp: (AppInfo) -> Void
     let onTapFolder: (FolderInfo) -> Void
     let onLongPress: () -> Void
-    let onDeleteApp: ((AppInfo) -> Void)?
-    let onBeginDrag: (String, Int, CGPoint) -> Void
+    let onBeginDrag: (String, CGPoint) -> Void
     let onUpdateDragTarget: (Int, CGPoint) -> Void
     let onEndDrag: () -> Void
     let onDropOnFolder: ((String, UUID) -> Void)?
-
-    @State private var slotFrames: [Int: CGRect] = [:]
 
     var body: some View {
         GeometryReader { geo in
@@ -36,9 +34,11 @@ struct GridPageView: View {
             let effectiveIconSize = min(max(iconSize, 24), cellW - 16, cellH - 16)
 
             VStack(spacing: vSpacing) {
-                ForEach(Array(rows.enumerated()), id: \.offset) { rowIdx, rowItems in
+                ForEach(0..<rows.count, id: \.self) { rowIdx in
+                    let rowItems = rows[rowIdx]
                     HStack(spacing: hSpacing) {
-                        ForEach(Array(rowItems.enumerated()), id: \.offset) { colIdx, item in
+                        // 用图标本身（LayoutItem）作为稳定身份，让同一 app 在重排/刷新时尽量复用视图。
+                        ForEach(Array(rowItems.enumerated()), id: \.element) { colIdx, item in
                             let slotIdx = rowIdx * columns + colIdx
                             iconCell(item: item, slotIndex: slotIdx, cellWidth: cellW, cellHeight: cellH, effectiveIconSize: effectiveIconSize)
                         }
@@ -51,10 +51,13 @@ struct GridPageView: View {
                     .frame(maxWidth: .infinity)
                 }
             }
+            // 拖拽中目标槽位变化 → 邻近图标以弹簧动画让位（实时让位效果）。
+            // 仅随 targetSlotIndex 触发：非拖拽时翻页/重排不会误触发弹簧，保持「即时切换」体验。
+            .animation(.spring(response: 0.45, dampingFraction: 0.8), value: dragState.targetSlotIndex)
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
             .onPreferenceChange(SlotFrameKey.self) { newFrames in
                 // 仅在帧真正变化时更新，防止 preference → state → render 循环
-                if newFrames != slotFrames { slotFrames = newFrames }
+                if newFrames != viewModel.slotFrames { viewModel.slotFrames = newFrames }
             }
         }
     }
@@ -67,12 +70,18 @@ struct GridPageView: View {
             switch item {
             case .app(let bundleID):
                 if let app = apps.first(where: { $0.bundleID == bundleID }) {
+                    // folderCandidateID 在进度走满前即指向真正的目标 app，避免实时让位后
+                    // 进度环误画在被拖 app 自己的 ghost 上。
                     let isDragged = dragState.isDragging && dragState.draggedBundleID == bundleID
-                    let isFolderTarget = dragState.folderTargetID == bundleID
+                    let isFolderTarget = !isDragged
+                                      && (dragState.folderCandidateID == bundleID
+                                          || dragState.folderTargetID == bundleID)
                     let isSelected = !dragState.isDragging && selectedSlotIndex == slotIndex
                     let folderProgressValue: Double = {
-                        guard dragState.isDragging, dragState.targetSlotIndex == slotIndex else { return 0 }
-                        return dragState.folderTargetID == bundleID ? 1 : dragState.folderProgress
+                        guard dragState.isDragging, !isDragged else { return 0 }
+                        if dragState.folderTargetID == bundleID { return 1 }
+                        if dragState.folderCandidateID == bundleID { return dragState.folderProgress }
+                        return 0
                     }()
 
                     AppIconView(
@@ -81,20 +90,27 @@ struct GridPageView: View {
                         isEditMode: isEditMode,
                         onTap: { onTapApp(app) },
                         onLongPress: onLongPress,
-                        onDelete: app.isMASApp ? { onDeleteApp?(app) } : nil
+                        onDelete: nil
                     )
-                    .opacity(isDragged ? 0.2 : 1.0)
                     .scaleEffect(isFolderTarget ? 1.12 : (isSelected ? 1.06 : 1.0))
                     .overlay(
-                        RoundedRectangle(cornerRadius: effectiveIconSize * 0.22)
-                            .strokeBorder(
-                                Color.white.opacity(isSelected ? 0.9 : (isFolderTarget ? 0.85 : 0)),
-                                lineWidth: isSelected ? 3 : 2
-                            )
-                            .frame(width: effectiveIconSize + (isSelected ? 12 : 8), height: effectiveIconSize + (isSelected ? 12 : 8))
-                            .allowsHitTesting(false)
+                        ZStack {
+                            // 即时标识环：悬停到 app 上立即显示完整蓝圈，
+                            // 作为"将创建文件夹"的明确标识（不随进度从 0 渐显）。
+                            if isFolderTarget {
+                                Circle()
+                                    .stroke(Color.accentColor, lineWidth: 4)
+                                    .frame(width: effectiveIconSize * 0.92, height: effectiveIconSize * 0.92)
+                                    .offset(y: -(effectiveIconSize * 0.14 + 3))
+                                    .allowsHitTesting(false)
+                            }
+                            // 0.7s 确认倒计时的内弧（仅作微妙提示，补充在标识环内圈）
+                            folderProgressRing(value: folderProgressValue, iconSize: effectiveIconSize)
+                        }
                     )
-                    .overlay(folderProgressRing(value: folderProgressValue, iconSize: effectiveIconSize))
+                    // 被拖 app 在网格中隐藏，只保留跟随鼠标的浮层图标。
+                    // opacity 必须放在 overlay 之后，否则 overlay（进度环）不会随内容一起隐藏。
+                    .opacity(isDragged ? 0.0 : 1.0)
                     .animation(.spring(duration: 0.25), value: isFolderTarget)
                     .animation(.easeOut(duration: 0.12), value: isSelected)
                 } else {
@@ -104,6 +120,7 @@ struct GridPageView: View {
             case .folder(let id):
                 if let folder = folders[id] {
                     let isSelected = !dragState.isDragging && selectedSlotIndex == slotIndex
+                    let isFolderHover = dragState.folderHoverID == id
                     FolderThumbnailView(
                         folder: folder, apps: apps,
                         iconSize: effectiveIconSize,
@@ -112,16 +129,22 @@ struct GridPageView: View {
                         onTap: { onTapFolder(folder) },
                         onLongPress: onLongPress
                     )
+                    .scaleEffect(isFolderHover ? 1.12 : 1.0)
+                    .overlay(
+                        Group {
+                            if isFolderHover {
+                                RoundedRectangle(cornerRadius: effectiveIconSize * 0.22)
+                                    .strokeBorder(Color.white.opacity(0.85), lineWidth: 2)
+                                    .frame(width: effectiveIconSize + 8, height: effectiveIconSize + 8)
+                                    .allowsHitTesting(false)
+                            }
+                        }
+                    )
+                    // 注：文件夹本身不参与拖拽（避免「创建后文件夹被拖动滑动」的观感），
+                    // 仅保留点击打开 / 长按进编辑模式。
                 } else {
                     Color.clear.frame(width: cellWidth, height: cellHeight)
                 }
-            }
-
-            if isEditMode {
-                Color.clear
-                    .contentShape(Rectangle())
-                    .frame(width: cellWidth, height: cellHeight)
-                    .gesture(cellDragGesture(item: item, slotIndex: slotIndex))
             }
         }
         .frame(width: cellWidth, height: cellHeight)
@@ -154,32 +177,6 @@ struct GridPageView: View {
 
     // MARK: - 拖拽
 
-    private func cellDragGesture(item: LayoutItem, slotIndex: Int) -> some Gesture {
-        var hasBegunDrag = false
-        return DragGesture(minimumDistance: 5, coordinateSpace: .global)
-            .onChanged { value in
-                if !hasBegunDrag {
-                    hasBegunDrag = true
-                    if case .app(let bundleID) = item {
-                        onBeginDrag(bundleID, slotIndex, value.startLocation)
-                    }
-                }
-                if let nearest = nearestSlot(to: value.location) {
-                    onUpdateDragTarget(nearest, value.location)
-                }
-            }
-            .onEnded { value in
-                if let targetSlot = nearestSlot(to: value.location),
-                   targetSlot < items.count,
-                   case .folder(let fid) = items[targetSlot],
-                   case .app(let bundleID) = item {
-                    onDropOnFolder?(bundleID, fid)
-                } else {
-                    onEndDrag()
-                }
-            }
-    }
-
     private func slotFrameTracker(slotIndex: Int) -> some View {
         GeometryReader { geo in
             Color.clear.preference(
@@ -190,7 +187,7 @@ struct GridPageView: View {
     }
 
     private func nearestSlot(to point: CGPoint) -> Int? {
-        slotFrames.min { a, b in
+        viewModel.slotFrames.min { a, b in
             hypot(a.value.midX - point.x, a.value.midY - point.y) <
             hypot(b.value.midX - point.x, b.value.midY - point.y)
         }?.key
