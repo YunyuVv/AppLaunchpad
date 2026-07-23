@@ -1,8 +1,6 @@
 import Foundation
 
 /// 图标拖拽过程中的实时状态。
-/// 当前仅支持「网格内 app 重排」一种场景（文件夹功能已移除），
-/// 故不再有 DragContext / folderHoverID 等文件夹相关字段。
 struct DragState {
     var isDragging: Bool = false
     var draggedBundleID: String = ""
@@ -15,5 +13,23 @@ struct DragState {
     var cursorSlot: Int = 0
     var dragLocation: CGPoint = .zero
 
+    // ── 文件夹悬停（2026-07-24）──
+    /// 光标悬停在哪个 app 的 icon 上（nil = 未悬停）
+    var hoverTargetBundleID: String? = nil
+    /// 光标悬停在哪个文件夹的 icon 上
+    var hoverTargetFolderID: UUID? = nil
+    /// 悬停目标在原布局中的槽位索引（用于创建文件夹时定位，与 cursorSlot 解耦）
+    var hoverTargetSlot: Int? = nil
+    /// 被拖拽的是 app 还是文件夹
+    var draggedItemType: DragItemType = .app
+    /// 被拖拽的文件夹 ID（仅 draggedItemType == .folder 时有效）
+    var draggedFolderID: UUID? = nil
+
     var isEmpty: Bool { !isDragging }
+}
+
+/// 拖拽源的项类型
+enum DragItemType: Equatable {
+    case app
+    case folder
 }

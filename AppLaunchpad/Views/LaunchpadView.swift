@@ -9,6 +9,7 @@ struct LaunchpadView: View {
     @State private var appeared = false
     @State private var dragOffsetX: CGFloat = 0
     @State private var isDragging = false
+    @State private var expandedFolderID: UUID? = nil
     /// 拖拽起手状态：用 @GestureState 而非手势闭包内的局部变量。
     /// 原因：globalDragGesture 是计算属性，拖拽中 @Observable 频繁触发 body 重算会让手势
     /// 被反复重建，闭包局部变量随之被重置 → 松手时 onEnded 跑在"新实例"上、startBundleID 为 nil
@@ -123,6 +124,19 @@ struct LaunchpadView: View {
 
                 // 拖拽浮动图标：跟随鼠标自由移动，不参与命中检测
                 floatingDragIcon(iconSize: iconSize)
+
+                // 文件夹展开视图 overlay
+                if let folderID = expandedFolderID,
+                   let folder = viewModel.folderInfo(for: folderID) {
+                    FolderExpandedView(
+                        folder: folder,
+                        apps: viewModel.allApps,
+                        iconSize: iconSize,
+                        onDismiss: { expandedFolderID = nil },
+                        onLaunch: { viewModel.launch($0) }
+                    )
+                    .zIndex(1000)
+                }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .scaleEffect(appeared ? 1.0 : 0.92)
@@ -271,7 +285,8 @@ struct LaunchpadView: View {
                     viewModel: viewModel,
                     onTapApp: { viewModel.launch($0) },
                     onLongPress: {},
-                    onBeginDrag: { _, _ in }, onUpdateDragTarget: { _, _ in }, onEndDrag: {}
+                    onBeginDrag: { _, _ in }, onUpdateDragTarget: { _, _ in }, onEndDrag: {},
+                    onTapFolder: { _ in }
                 )
             }
         }
@@ -320,7 +335,8 @@ struct LaunchpadView: View {
                 onLongPress: { viewModel.enterEditMode() },
                 onBeginDrag: { id, loc in viewModel.beginDrag(bundleID: id, pageIndex: pageIdx, location: loc) },
                 onUpdateDragTarget: { _, loc in viewModel.updateDragTarget(location: loc) },
-                onEndDrag: { viewModel.endDrag() }
+                onEndDrag: { viewModel.endDrag() },
+                onTapFolder: { expandedFolderID = $0 }
             )
             .offset(x: dragOffsetX)
         }

@@ -1,22 +1,24 @@
 import AppKit
 import Observation
 
-/// 拖拽控制器：网格内「app 重排」的状态机 + 行为全集。
+/// 拖拽控制器：网格内「app 重排 / 文件夹创建 / 添加到文件夹」的状态机。
 /// 落点由 GridGeometry 纯几何推导（光标 + 固定几何），与图标视觉位置无关，
-/// 因此实时让位不会造成反馈振荡。文件夹功能已移除，本控制器只负责 app 重排。
+/// 因此实时让位不会造成反馈振荡。
 @Observable
 @MainActor
 final class DragController {
 
     let data: LaunchpadData
     private let layoutService: LayoutService
+    private let folderController: FolderController
 
     // 边缘翻页计时器：拖拽到屏幕边缘时自动翻页（必须加到 .common mode）
     private var edgeScrollTimer: Timer? = nil
 
-    init(data: LaunchpadData, layoutService: LayoutService) {
+    init(data: LaunchpadData, layoutService: LayoutService, folderController: FolderController) {
         self.data = data
         self.layoutService = layoutService
+        self.folderController = folderController
     }
 
     // MARK: - 拖拽排序
@@ -36,8 +38,8 @@ final class DragController {
         // 落点由 GridGeometry 纯几何推导，无需拍坐标快照。
     }
 
-    /// 拖拽中更新目标：由光标坐标经 GridGeometry 推导落点槽位（cursorSlot）。
-    /// 不依赖 measured frame / 快照 / 最近中心点，与图标当前视觉位置无关。
+    /// 拖拽中更新目标：①几何落点（cursorSlot → make-way）
+    /// ②悬停目标检测（hoverTargetBundleID/FolderID）
     func updateDragTarget(location: CGPoint) {
         guard data.dragState.isDragging else { return }
 
@@ -47,8 +49,65 @@ final class DragController {
         detectEdgeScroll(location: location)
 
         guard let geo = data.gridGeometry else { return }
+        // ① 几何落点（用于 make-way）
         let slot = geo.slotUnderCursor(location)
         data.dragState.cursorSlot = slot
+
+        // ② 悬停检测（用原始布局，与 make-way 完全独立，互不干扰）
+        detectHoverTarget(location: location, geo: geo)
+    }
+
+    // MARK: - 悬停检测（文件夹创建 / 添加）
+
+    /// 用"移除被拖 app 后的视觉布局"检测悬停目标。
+    /// 内联计算布局（不调 pageItemsWithDrag），避免 hoverTarget → pageItemsWithDrag
+    /// → detectHoverTarget → hoverTarget 的循环依赖。
+    private func detectHoverTarget(location: CGPoint, geo: GridGeometry) {
+        guard data.currentPageIndex < data.layout.pages.count else {
+            clearHover(); return
+        }
+        // 视觉布局：原始布局减掉被拖 app（其余项自然左移）
+        var visualItems = data.layout.pages[data.currentPageIndex]
+        visualItems.removeAll {
+            if case .app(let id) = $0, id == data.dragState.draggedBundleID { return true }
+            return false
+        }
+
+        for (visSlot, item) in visualItems.enumerated() {
+            let col = CGFloat(visSlot % geo.columns)
+            let row = CGFloat(visSlot / geo.columns)
+            let cellX = geo.origin.x + col * (geo.cellW + geo.hSpacing)
+            let cellY = geo.origin.y + row * (geo.cellH + geo.vSpacing)
+
+            let marginX = geo.cellW * 0.15
+            let hitRect = CGRect(x: cellX + marginX, y: cellY,
+                                 width: geo.cellW - 2 * marginX,
+                                 height: geo.cellH)
+            guard hitRect.contains(location) else { continue }
+
+            switch item {
+            case .app(let bundleID):
+                if bundleID != data.dragState.draggedBundleID {
+                    // hoverTargetBundleID 唯一标识目标，endDrag 用 findInPage 查位置
+                    data.dragState.hoverTargetBundleID = bundleID
+                    data.dragState.hoverTargetSlot = visSlot
+                    data.dragState.hoverTargetFolderID = nil
+                    return
+                }
+            case .folder(let folderID):
+                data.dragState.hoverTargetFolderID = folderID
+                data.dragState.hoverTargetSlot = visSlot
+                data.dragState.hoverTargetBundleID = nil
+                return
+            }
+        }
+        clearHover()
+    }
+
+    private func clearHover() {
+        data.dragState.hoverTargetBundleID = nil
+        data.dragState.hoverTargetFolderID = nil
+        data.dragState.hoverTargetSlot = nil
     }
 
     // MARK: - 边缘翻页
@@ -110,9 +169,47 @@ final class DragController {
         stopEdgeScrollTimer()
         guard data.dragState.isDragging else { return }
 
-        // 重排落点：与拖拽中「让位预览」共用同一 move 语义，松手零跳变。
-        // 用松手瞬间的精确坐标（dragLocation）按几何重算落点作为兜底，
-        // 消除「最后一步 onChanged 与松手位置存在一格偏差」导致的偏移（落不到正位）。
+        // ═══ 悬停分支（优先于重排）═══
+
+        // ── 分支 1：创建新文件夹（拖拽 app 到另一个 app 的 icon 上）──
+        if let targetBundleID = data.dragState.hoverTargetBundleID {
+            let draggedID = data.dragState.draggedBundleID
+            let srcPage = data.dragState.sourcePageIndex
+
+            // ① 先移除被拖 app（目标可能因此左移）
+            removeFromPage(draggedID, pageIndex: srcPage)
+            // ② 在移除被拖 app 之后，查询目标 app 的当前位置
+            let targetSlot = findInPage(data.currentPageIndex, .app(bundleID: targetBundleID))
+            // ③ 再移除目标 app
+            removeFromPage(targetBundleID, pageIndex: data.currentPageIndex)
+            // ④ 文件夹插入到目标 app 被移除前的位置
+            let insertSlot = targetSlot.map { min($0, data.layout.pages[data.currentPageIndex].count) }
+                             ?? min(data.dragState.hoverTargetSlot ?? data.dragState.cursorSlot,
+                                    data.layout.pages[data.currentPageIndex].count)
+
+            folderController.createFolder(
+                containing: [draggedID, targetBundleID],
+                atPage: data.currentPageIndex,
+                atSlot: insertSlot
+            )
+            data.saveLayout()
+            data.dragState = DragState()
+            if data.pendingAppsRefresh { completePendingRefresh() }
+            return
+        }
+
+        // ── 分支 2：添加到已有文件夹 ──
+        if let targetFolderID = data.dragState.hoverTargetFolderID {
+            let draggedID = data.dragState.draggedBundleID
+            removeFromPage(draggedID, pageIndex: data.dragState.sourcePageIndex)
+            folderController.addApp(draggedID, toFolder: targetFolderID)
+            data.saveLayout()
+            data.dragState = DragState()
+            if data.pendingAppsRefresh { completePendingRefresh() }
+            return
+        }
+
+        // ── 分支 3：普通重排（现有逻辑，不变）──
         let src = data.dragState.sourceSlotIndex
         var to = data.dragState.cursorSlot
         if let geo = data.gridGeometry {
@@ -142,25 +239,53 @@ final class DragController {
         data.saveLayout()
 
         data.dragState = DragState()
-        // 拖拽结束后，若期间有被挂起的 FSEvents 应用刷新，立即补执行：
-        // 此时 dragState 已复位（非 dragging），refreshApps 会正常跑且保留刚排好的顺序。
-        if data.pendingAppsRefresh {
-            data.pendingAppsRefresh = false
-            Task { await layoutService.refreshApps() }
+        if data.pendingAppsRefresh { completePendingRefresh() }
+    }
+
+    // MARK: - 辅助
+
+    /// 从指定页中移除某个 app 的所有槽位。
+    private func removeFromPage(_ bundleID: String, pageIndex: Int) {
+        guard pageIndex < data.layout.pages.count else { return }
+        data.layout.pages[pageIndex].removeAll {
+            if case .app(let id) = $0, id == bundleID { return true }
+            return false
         }
     }
 
+    /// 在指定页中查找某个 LayoutItem 的槽位索引。
+    private func findInPage(_ pageIndex: Int, _ target: LayoutItem) -> Int? {
+        guard pageIndex < data.layout.pages.count else { return nil }
+        return data.layout.pages[pageIndex].firstIndex(of: target)
+    }
+
+    private func completePendingRefresh() {
+        data.pendingAppsRefresh = false
+        Task { await layoutService.refreshApps() }
+    }
+
     /// 拖拽时返回当前页的"视觉排列"（让位预览数据源）。
-    /// 同页：移除被拖 app 并插入 cursorSlot 让位；
-    /// 翻页后目标页：把被拖 app 作为占位插入 cursorSlot 让位。
+    /// 文件夹模式（hover 在 icon 上）：仅移除被拖 app，目标留在原位 → 网格留空。
+    /// 排序模式（光标在缝隙）：正常 make-way。
     func pageItemsWithDrag(pageIndex: Int) -> [LayoutItem] {
         guard data.dragState.isDragging,
               pageIndex < data.layout.pages.count else {
             return pageIndex < data.layout.pages.count ? data.layout.pages[pageIndex] : []
         }
 
+        // ── 文件夹模式：被拖 app 在网格中留空，仅浮动图标悬停在目标上方 ──
+        if let _ = data.dragState.hoverTargetSlot,
+           pageIndex == data.dragState.sourcePageIndex {
+            let src = data.dragState.sourceSlotIndex
+            var items = data.layout.pages[pageIndex]
+            guard src < items.count else { return items }
+            items.remove(at: src)  // 移除被拖 app，不 insert → 原位置留空
+            return items
+        }
+
+        // ── 排序模式：正常 make-way ──
         if pageIndex == data.dragState.sourcePageIndex {
-            // 源页：把被拖 app 从原位拔出、插到当前光标槽位 — 其余 app 让位推开
+            // 源页：把被拖 app 从原位拔出、插到当前光标槽位 �� 其余 app 让位推开
             let src = data.dragState.sourceSlotIndex
             let to  = data.dragState.cursorSlot
             var items = data.layout.pages[pageIndex]

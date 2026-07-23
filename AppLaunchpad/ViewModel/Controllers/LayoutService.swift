@@ -130,25 +130,22 @@ final class LayoutService {
             }
         }
 
-        // 文件夹功能已移除：将遗留布局里的文件夹槽位展开为其内部 app，
-        // 文件夹字典不再保留（置空）。这样既兼容旧 layout.json、又避免网格出现空洞。
-        // （后续若重新启用文件夹特性，可在此恢复对 folders 的保留与重建，
-        //  并加回 FolderController / FolderThumbnailView / FolderExpandedView。）
-        var flattened: [[LayoutItem]] = []
-        for page in pages {
-            var newPage: [LayoutItem] = []
-            for item in page {
-                if case .folder(let id) = item {
-                    let apps = (saved.folders[id]?.appIDs ?? []).map { LayoutItem.app(bundleID: $0) }
-                    newPage.append(contentsOf: apps)
-                } else {
-                    newPage.append(item)
+        // 文件夹功能（2026-07-24）：保留 folders 字典，不再展开 .folder 为 app。
+        // 文件夹作为一个不可拆分单元留在布局中；folders 字典同步保留。
+        // 仅过滤掉已卸载的文件夹（所有内部 app 都已卸载 → 文件夹无内容 → 移除其占位）。
+        let validFolderIDs = Set(saved.folders.filter { _, folder in
+            folder.appIDs.contains { scannedIDs.contains($0) }
+        }.keys)
+        for i in pages.indices {
+            pages[i].removeAll { item in
+                if case .folder(let id) = item, !validFolderIDs.contains(id) {
+                    return true
                 }
+                return false
             }
-            flattened.append(newPage)
         }
-        pages = flattened.filter { !$0.isEmpty }
+        pages = pages.filter { !$0.isEmpty }
 
-        return LayoutData(pages: pages.isEmpty ? [newItems] : pages, folders: [:])
+        return LayoutData(pages: pages.isEmpty ? [newItems] : pages, folders: saved.folders)
     }
 }

@@ -19,6 +19,7 @@ struct GridPageView: View {
     let onBeginDrag: (String, CGPoint) -> Void
     let onUpdateDragTarget: (Int, CGPoint) -> Void
     let onEndDrag: () -> Void
+    let onTapFolder: (UUID) -> Void
 
     var body: some View {
         GeometryReader { geo in
@@ -53,7 +54,7 @@ struct GridPageView: View {
 // 让位布局与 endDrag 写入的最终布局顺序一致（都是 insert at to），
 // 因此松手瞬间 items 数组不变 → 此动画不再触发 → 不会出现「松手后整网 spring
 // 把图标弹到非最终位置」的残影。非拖拽时翻页/重排也不会误触发弹簧。
-.animation(.spring(response: 0.45, dampingFraction: 0.8), value: items)
+.animation(.spring(response: 0.3, dampingFraction: 0.9), value: items)
 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         }
     }
@@ -62,6 +63,8 @@ struct GridPageView: View {
 
     @ViewBuilder
     private func iconCell(item: LayoutItem, slotIndex: Int, cellWidth: CGFloat, cellHeight: CGFloat, effectiveIconSize: CGFloat) -> some View {
+        let isSelected = !dragState.isDragging && selectedSlotIndex == slotIndex
+
         switch item {
         case .app(let bundleID):
             // 关键：每个格子必须固定为 cellW × cellH，使视觉网格与拖拽几何
@@ -70,7 +73,7 @@ struct GridPageView: View {
             ZStack {
                 if let app = apps.first(where: { $0.bundleID == bundleID }) {
                     let isDragged = dragState.isDragging && dragState.draggedBundleID == bundleID
-                    let isSelected = !dragState.isDragging && selectedSlotIndex == slotIndex
+                    let isHoverTarget = dragState.hoverTargetBundleID == bundleID
 
                     AppIconView(
                         app: app,
@@ -80,17 +83,33 @@ struct GridPageView: View {
                         onLongPress: onLongPress,
                         onDelete: nil
                     )
-                    .scaleEffect(isSelected ? 1.06 : 1.0)
+                    .scaleEffect(isHoverTarget ? 1.15 : (isSelected ? 1.06 : 1.0))
                     .opacity(isDragged ? 0.0 : 1.0)
+                    .animation(.easeOut(duration: 0.15), value: isHoverTarget)
                     .animation(.easeOut(duration: 0.12), value: isSelected)
                 }
             }
             .frame(width: cellWidth, height: cellHeight)
 
-        case .folder:
-            // 文件夹功能已移除：运行时不应出现 .folder 项（mergeLayout 已展开为 app）。
-            // 此处仅作安全占位，避免任何遗留数据导致缺格或崩溃。
-            Color.clear.frame(width: cellWidth, height: cellHeight)
+        case .folder(let folderID):
+            if let folder = viewModel.folderInfo(for: folderID) {
+                let isHoverTarget = dragState.hoverTargetFolderID == folderID
+                FolderThumbnailView(
+                    folder: folder,
+                    apps: apps,
+                    iconSize: effectiveIconSize,
+                    isEditMode: isEditMode,
+                    isSelected: isSelected,
+                    onTap: { onTapFolder(folderID) },
+                    onLongPress: onLongPress,
+                    onDelete: { viewModel.deleteFolder(folderID, expandToPage: pageIndex) }
+                )
+                .scaleEffect(isHoverTarget ? 1.15 : 1.0)
+                .animation(.easeOut(duration: 0.15), value: isHoverTarget)
+                .frame(width: cellWidth, height: cellHeight)
+            } else {
+                Color.clear.frame(width: cellWidth, height: cellHeight)
+            }
         }
     }
 

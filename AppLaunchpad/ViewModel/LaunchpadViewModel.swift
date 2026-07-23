@@ -23,18 +23,21 @@ final class LaunchpadViewModel {
     let drag: DragController
     let search: SearchController
     let navigation: NavigationController
+    let folderController: FolderController
 
     init() {
         let data = LaunchpadData()
         let layoutService = LayoutService(data: data)
         let search = SearchController(data: data)
-        let drag = DragController(data: data, layoutService: layoutService)
+        let folderController = FolderController(data: data)
+        let drag = DragController(data: data, layoutService: layoutService, folderController: folderController)
         let navigation = NavigationController(data: data, search: search)
         self.data = data
         self.layoutService = layoutService
         self.search = search
         self.drag = drag
         self.navigation = navigation
+        self.folderController = folderController
         // 选中项回车启动：由 NavigationController 回调，避免 Controller 反向依赖根 VM
         navigation.launcher = { [weak self] app in self?.launch(app) }
     }
@@ -94,6 +97,17 @@ final class LaunchpadViewModel {
     func slotUnderCursor(_ point: CGPoint, pageIndex: Int) -> Int? { data.slotUnderCursor(point, pageIndex: pageIndex) }
     func iconFootprintItemAt(_ point: CGPoint) -> (slot: Int, item: LayoutItem)? { data.iconFootprintItemAt(point) }
     func appAtIconPoint(_ point: CGPoint) -> String? { data.appAtIconPoint(point) }
+
+    // MARK: - 文件夹（→ FolderController）
+
+    func folderInfo(for folderID: UUID) -> FolderInfo? { folderController.folderInfo(for: folderID) }
+    func createFolder(containing bundleIDs: [String], atPage page: Int, atSlot slot: Int, name: String? = nil) -> UUID {
+        folderController.createFolder(containing: bundleIDs, atPage: page, atSlot: slot, name: name)
+    }
+    func deleteFolder(_ folderID: UUID, expandToPage page: Int = 0) {
+        folderController.deleteFolder(folderID, expandToPage: page)
+    }
+    func renameFolder(_ folderID: UUID, to name: String) { folderController.renameFolder(folderID, to: name) }
 
     // MARK: - 搜索（→ SearchController 已通过属性转发；导航走 NavigationController）
 

@@ -28,6 +28,7 @@
 		8E06974C52D8B3515680E025 /* HotkeyPane.swift in Sources */ = {isa = PBXBuildFile; fileRef = 44FE080088B707856429D068 /* HotkeyPane.swift */; };
 		8FF0A30EFEA6A3E9DE2AB833 /* PageIndicatorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B13BB2C9D42C5393730D7DF3 /* PageIndicatorView.swift */; };
 		937F74DEB50C4A1EA30144B6 /* SearchController.swift in Sources */ = {isa = PBXBuildFile; fileRef = C96B8C9571BC60D6395C9616 /* SearchController.swift */; };
+		97784A363D6E485702042EEF /* FolderThumbnailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E089DBDC860DD0E4D103A82D /* FolderThumbnailView.swift */; };
 		97A6A76843895860C80677BF /* AboutPane.swift in Sources */ = {isa = PBXBuildFile; fileRef = 439337F86B0F122797545C77 /* AboutPane.swift */; };
 		9C7539E2A45061F42D7BB817 /* GridGeometry.swift in Sources */ = {isa = PBXBuildFile; fileRef = 31103B14AC45D4F871B5889C /* GridGeometry.swift */; };
 		A36A6D9E58E93500498FEAD6 /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2481B06DA5521D3CE3F58222 /* AppDelegate.swift */; };
@@ -38,8 +39,10 @@
 		CC2805989810F6F1C212CE3F /* UserPreferences.swift in Sources */ = {isa = PBXBuildFile; fileRef = 02DB31893C0A6A82206A0619 /* UserPreferences.swift */; };
 		CE53B194339369B1D415AE9C /* WobbleModifier.swift in Sources */ = {isa = PBXBuildFile; fileRef = 88E82B78948C6D2A4056669A /* WobbleModifier.swift */; };
 		D0C22C48074A5C59A81D34D0 /* LayoutService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2EBF79D74C9F7A409BC1454C /* LayoutService.swift */; };
+		DB69572BB5AE84B7263B8422 /* FolderController.swift in Sources */ = {isa = PBXBuildFile; fileRef = EEC15481E17707A96309B85C /* FolderController.swift */; };
 		E46A0A5C160467A0C14E5B04 /* AppLaunchpadApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0915EDF9A5283181DB0CF3DB /* AppLaunchpadApp.swift */; };
 		E8D81CF1D881ED943F621ACB /* Array+Chunked.swift in Sources */ = {isa = PBXBuildFile; fileRef = E5571F58397D39EAD78E758A /* Array+Chunked.swift */; };
+		F0DB7C5FD6EB256E784541EC /* FolderExpandedView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C146C0F827A8BA6F36C2D475 /* FolderExpandedView.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -71,12 +74,15 @@
 		B2AA13E2499E45A28C0DD504 /* DisplayPane.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DisplayPane.swift; sourceTree = "<group>"; };
 		B3FBD4826F760701DE617F7E /* LayoutStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LayoutStore.swift; sourceTree = "<group>"; };
 		B84F0FA3544F20E1E9C318E0 /* FSEventsWatcher.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FSEventsWatcher.swift; sourceTree = "<group>"; };
+		C146C0F827A8BA6F36C2D475 /* FolderExpandedView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FolderExpandedView.swift; sourceTree = "<group>"; };
 		C64B20A6D6E4C3497184417C /* FuzzySearch.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FuzzySearch.swift; sourceTree = "<group>"; };
 		C96B8C9571BC60D6395C9616 /* SearchController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SearchController.swift; sourceTree = "<group>"; };
 		C9E6F8441A87939DD7AD5F64 /* IconCache.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IconCache.swift; sourceTree = "<group>"; };
 		CFB9F1B73597C6472AF498B4 /* AppearancePane.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppearancePane.swift; sourceTree = "<group>"; };
 		D3878FE9A34EAF3AAFF0447E /* FolderInfo.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FolderInfo.swift; sourceTree = "<group>"; };
+		E089DBDC860DD0E4D103A82D /* FolderThumbnailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FolderThumbnailView.swift; sourceTree = "<group>"; };
 		E5571F58397D39EAD78E758A /* Array+Chunked.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Array+Chunked.swift"; sourceTree = "<group>"; };
+		EEC15481E17707A96309B85C /* FolderController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FolderController.swift; sourceTree = "<group>"; };
 		FA26C5811E8E077635927696 /* AppIconView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppIconView.swift; sourceTree = "<group>"; };
 		FCE6821DCD64715CC5D42BD7 /* DragState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DragState.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
@@ -86,6 +92,7 @@
 			isa = PBXGroup;
 			children = (
 				2E5B3C357AB3EC50D06B1272 /* DragController.swift */,
+				EEC15481E17707A96309B85C /* FolderController.swift */,
 				2EBF79D74C9F7A409BC1454C /* LayoutService.swift */,
 				1C8F6EC646880B2A114FF0F9 /* NavigationController.swift */,
 				C96B8C9571BC60D6395C9616 /* SearchController.swift */,
@@ -219,6 +226,8 @@
 				39FE55E213834D010EF938FE /* Settings */,
 				FA26C5811E8E077635927696 /* AppIconView.swift */,
 				6B1AD81D2C9486EF9AF88D3C /* BackgroundView.swift */,
+				C146C0F827A8BA6F36C2D475 /* FolderExpandedView.swift */,
+				E089DBDC860DD0E4D103A82D /* FolderThumbnailView.swift */,
 				0E7B942F0AE743967FAA542A /* GridPageView.swift */,
 				646E7C03C74BB5E5619A63B7 /* LaunchpadView.swift */,
 				B13BB2C9D42C5393730D7DF3 /* PageIndicatorView.swift */,
@@ -300,7 +309,10 @@
 				A753CC68246576B0D3391A8C /* DragController.swift in Sources */,
 				264E5AED4ADD07EFC41B62E3 /* DragState.swift in Sources */,
 				81A52A3DE9E9630467348E0B /* FSEventsWatcher.swift in Sources */,
+				DB69572BB5AE84B7263B8422 /* FolderController.swift in Sources */,
+				F0DB7C5FD6EB256E784541EC /* FolderExpandedView.swift in Sources */,
 				57358A506850347036CE583E /* FolderInfo.swift in Sources */,
+				97784A363D6E485702042EEF /* FolderThumbnailView.swift in Sources */,
 				8CA01FD0069796C6ACBB9D30 /* FuzzySearch.swift in Sources */,
 				9C7539E2A45061F42D7BB817 /* GridGeometry.swift in Sources */,
 				30F2F846DB09A6EE9B5D3683 /* GridPageView.swift in Sources */,
