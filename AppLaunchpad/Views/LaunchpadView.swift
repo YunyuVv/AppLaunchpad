@@ -9,7 +9,12 @@ struct LaunchpadView: View {
     @State private var appeared = false
     @State private var dragOffsetX: CGFloat = 0
     @State private var isDragging = false
-    @State private var expandedFolder: FolderInfo? = nil
+    /// 拖拽起手状态：用 @GestureState 而非手势闭包内的局部变量。
+    /// 原因：globalDragGesture 是计算属性，拖拽中 @Observable 频繁触发 body 重算会让手势
+    /// 被反复重建，闭包局部变量随之被重置 → 松手时 onEnded 跑在"新实例"上、startBundleID 为 nil
+    /// → guard 失败、endDrag 不执行 → app 不落位 + isDragging 卡死（"松手后无法点击"）。
+    /// @GestureState 是视图级状态，跨手势重建保留，且专为拖拽设计、写它不会中断手势。
+    @GestureState private var dragStart: (checked: Bool, bundleID: String?) = (false, nil)
     // 直接观察同一个 UserPreferences 单例：行列数/间距/边距均在此读取，
     // 设置面板拖动滑块时会立即触发本视图重新布局（实时生效）。
     @Bindable private var prefs = UserPreferences.shared
@@ -88,13 +93,11 @@ struct LaunchpadView: View {
             ZStack {
                 BackgroundView().allowsHitTesting(false)
 
-                // 关闭/退出编辑/收起文件夹层，右键弹出上下文菜单
+                // 关闭/退出编辑，右键弹出上下文菜单
                 Color.clear
                     .contentShape(Rectangle())
                     .onTapGesture {
-                        if expandedFolder != nil {
-                            withAnimation(.spring(duration: 0.25)) { expandedFolder = nil }
-                        } else if viewModel.isEditMode {
+                        if viewModel.isEditMode {
                             viewModel.exitEditMode()
                         } else {
                             onDismiss()
@@ -118,68 +121,17 @@ struct LaunchpadView: View {
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
 
-                // 文件夹展开浮层
-                if let folder = expandedFolder {
-                    Color.black.opacity(0.45)
-                        .ignoresSafeArea()
-                        .allowsHitTesting(false)
-
-                    FolderExpandedView(
-                        folder: folder,
-                        apps: viewModel.allApps,
-                        isEditMode: viewModel.isEditMode,
-                        viewModel: viewModel,
-                        onTapApp: { app in
-                            withAnimation { expandedFolder = nil }
-                            viewModel.launch(app)
-                        },
-                        onRemoveApp: { bundleID in
-                            viewModel.removeAppFromFolder(
-                                bundleID: bundleID,
-                                folderID: folder.id,
-                                pageIndex: viewModel.currentPageIndex
-                            )
-                            // 若文件夹解散，关闭展开视图
-                            if viewModel.layout.folders[folder.id] == nil {
-                                withAnimation { expandedFolder = nil }
-                            } else {
-                                expandedFolder = viewModel.layout.folders[folder.id]
-                            }
-                        },
-                        onRename: { newName in
-                            viewModel.renameFolder(id: folder.id, newName: newName)
-                            expandedFolder = viewModel.layout.folders[folder.id]
-                        },
-                        onAppDragEnded: { app, droppedOutside, loc in
-                            if droppedOutside {
-                                viewModel.moveAppOutOfFolder(
-                                    bundleID: app.bundleID,
-                                    dropLocation: loc,
-                                    pageIndex: viewModel.currentPageIndex
-                                )
-                            }
-                            // 文件夹内重排已在该手势 onEnded 中 commit；
-                            // 拖出或重排后统一刷新/关闭展开视图并重置拖拽状态。
-                            // 拖出后文件夹可能已解散或变化，同步最新状态
-                            if viewModel.layout.folders[folder.id] == nil {
-                                withAnimation { expandedFolder = nil }
-                            } else {
-                                expandedFolder = viewModel.layout.folders[folder.id]
-                            }
-                            viewModel.dragState = DragState()
-                        }
-                    )
-                    .transition(.scale(scale: 0.7).combined(with: .opacity))
-                }
-
                 // 拖拽浮动图标：跟随鼠标自由移动，不参与命中检测
-                // （启动台网格与文件夹内拖拽共用同一套 DragState，统一在此渲染）
                 floatingDragIcon(iconSize: iconSize)
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .scaleEffect(appeared ? 1.0 : 0.92)
             .opacity(appeared ? 1.0 : 0)
             .animation(.spring(duration: 0.35, bounce: 0.15), value: appeared)
+            // 松手时统一用 spring 驱动整个视图树（iconCell 让位回位 + floatingDragIcon transition 移除），
+            // 让浮动图标朝目标 cell 弹性滑过去再渐隐（与原生 Launchpad 视觉一致），
+            // 避免 transition 渐隐过程中残影停在光标位置造成「停在附近、没落正中心」的错觉。
+            .animation(.interactiveSpring(response: 0.35, dampingFraction: 0.82), value: viewModel.dragState.isDragging)
             // 把网格拖拽手势放到最稳定的根视图层级。这样无论 GridPageView 内部如何重建/翻页，
             // 手势识别器都存活，彻底解决「拖到第二页就卡死」。
             .simultaneousGesture(globalDragGesture)
@@ -204,55 +156,50 @@ struct LaunchpadView: View {
     /// 全局网格拖拽手势：宿主在 LaunchpadView 根视图，比 GridPageView 更稳定，
     /// 翻页时不会随内部网格重建而中断。
     private var globalDragGesture: some Gesture {
-        var hasCheckedStart = false
-        var startBundleID: String? = nil
+        DragGesture(minimumDistance: 5, coordinateSpace: .global)
+            .updating($dragStart) { value, state, _ in
+                guard !viewModel.isSearching else { return }
 
-        return DragGesture(minimumDistance: 5, coordinateSpace: .global)
-            .onChanged { value in
-                guard !viewModel.isSearching, expandedFolder == nil else { return }
-
-                if !hasCheckedStart {
-                    hasCheckedStart = true
-                    // 仅当起点真正落在某个槽位的 frame 内（即压在 app 图标上）才启动拖拽；
+                if !state.checked {
+                    state.checked = true
+                    // 仅当起点压在 app 图标上（footprint 内）才启动拖拽；
                     // 落在 cell 间隙 / 空白 / 文件夹上都不启动，让翻页手势或点击正常处理。
-                    if let slot = viewModel.slotAt(value.startLocation),
-                       let item = viewModel.itemAt(pageIndex: viewModel.currentPageIndex, slot: slot),
-                       case .app(let bundleID) = item {
-                        startBundleID = bundleID
+                    if let bundleID = viewModel.appAtIconPoint(value.startLocation) {
+                        state.bundleID = bundleID
                         if !viewModel.isEditMode { viewModel.enterEditMode() }
                         viewModel.beginDrag(bundleID: bundleID, pageIndex: viewModel.currentPageIndex, location: value.startLocation)
                     }
                 }
 
                 // 起点不是 app（空白/文件夹）：不启动图标拖拽，让 pagingDragGesture 处理翻页。
-                guard startBundleID != nil else { return }
+                guard state.bundleID != nil else { return }
 
-                if let nearest = viewModel.nearestSlot(to: value.location, itemsCount: 0) {
-                    viewModel.updateDragTarget(slotIndex: nearest, location: value.location)
-                }
+                // 落点纯几何推导：由光标坐标 + 固定网格几何算出 cursorSlot，
+                // 不再用 measured frame / 快照 / 最近中心点，避免让位动画导致落点漂移。
+                viewModel.updateDragTarget(location: value.location)
             }
-            .onEnded { _ in
-                guard startBundleID != nil, viewModel.dragState.isDragging else { return }
-                if let targetSlot = viewModel.nearestSlot(to: viewModel.dragState.dragLocation, itemsCount: 0),
-                   case .folder(let fid) = viewModel.itemAt(pageIndex: viewModel.currentPageIndex, slot: targetSlot) {
-                    viewModel.addAppToFolder(bundleID: viewModel.dragState.draggedBundleID, folderID: fid, pageIndex: viewModel.currentPageIndex)
-                } else {
+            .onEnded { value in
+                // 松手时用 dragState.draggedBundleID 判定落主体责任（@GestureState dragStart
+                // 在 onEnded 调用前已被 SwiftUI 复位为初始值，不可读）。
+                guard viewModel.dragState.draggedBundleID != nil, viewModel.dragState.isDragging else { return }
+                // 用松手瞬间的精确坐标再算一次落点，消除「最后一步 onChanged 与松手位置
+                // 存在一格偏差」导致的偏移（落不到正位 / 有点偏离）。
+                viewModel.updateDragTarget(location: value.location)
+                // 落地：easeOut 渐隐浮动图标 + GridPageView spring 重排入位，纯融合无轨迹
+                withAnimation(.easeOut(duration: 0.28)) {
                     viewModel.endDrag()
                 }
-                viewModel.dragState = DragState()   // 兜底重置拖拽态，避免文件夹分支漏清导致浮层残留
-                startBundleID = nil
-                hasCheckedStart = false
             }
     }
 
     private var pagingDragGesture: some Gesture {
         DragGesture(minimumDistance: 30, coordinateSpace: .global)
             .onChanged { value in
-                // 起点压在某个槽位上（app / 文件夹）：交给 globalDragGesture 或点击，
-                // 这里让行，不翻页。落在 cell 间隙 / 网格外则正常翻页。
-                guard !viewModel.isSearching, !viewModel.isEditMode, expandedFolder == nil,
+                // 起点压在 app 图标上：交给 globalDragGesture 或点击，这里让行，不翻页。
+                // 落在 cell 间隙 / 网格外（含文件夹）则正常翻页。
+                guard !viewModel.isSearching, !viewModel.isEditMode,
                       !viewModel.dragState.isDragging,
-                      viewModel.slotAt(value.startLocation) == nil else {
+                      viewModel.appAtIconPoint(value.startLocation) == nil else {
                     dragOffsetX = 0
                     return
                 }
@@ -261,9 +208,9 @@ struct LaunchpadView: View {
                 isDragging = true
             }
             .onEnded { value in
-                guard !viewModel.isSearching, !viewModel.isEditMode, expandedFolder == nil,
+                guard !viewModel.isSearching, !viewModel.isEditMode,
                       !viewModel.dragState.isDragging,
-                      viewModel.slotAt(value.startLocation) == nil else {
+                      viewModel.appAtIconPoint(value.startLocation) == nil else {
                     dragOffsetX = 0
                     return
                 }
@@ -316,16 +263,15 @@ struct LaunchpadView: View {
                 Text("未找到应用").font(.system(size: 18)).foregroundStyle(.white.opacity(0.6))
             } else {
                 GridPageView(
-                    items: items, apps: viewModel.allApps, folders: [:],
+                    items: items, apps: viewModel.allApps,
                     columns: cols, rows: rows,
                     hSpacing: effectiveHorizontalSpacing(), vSpacing: effectiveVerticalSpacing(),
                     iconSize: iconSize,
                     pageIndex: 0, selectedSlotIndex: viewModel.selectedSearchIndex, isEditMode: false, dragState: DragState(),
                     viewModel: viewModel,
-                    onTapApp: { viewModel.launch($0) }, onTapFolder: { _ in },
+                    onTapApp: { viewModel.launch($0) },
                     onLongPress: {},
-                    onBeginDrag: { _, _ in }, onUpdateDragTarget: { _, _ in }, onEndDrag: {},
-                    onDropOnFolder: nil
+                    onBeginDrag: { _, _ in }, onUpdateDragTarget: { _, _ in }, onEndDrag: {}
                 )
             }
         }
@@ -333,43 +279,56 @@ struct LaunchpadView: View {
 
     private func pagingView(iconSize: CGFloat, cols: Int, rows: Int) -> some View {
         let pageIdx = viewModel.currentPageIndex
-        // 拖拽中通过 pageItemsWithDrag 实时把被拖图标插入目标槽位，
-        // 邻近图标以弹簧动画让位（实时让位效果）。命中测试读固定 dragSlotFrames，
-        // 因此目标 app 不会因让位而"逃跑"，文件夹创建依旧可行。松手后 endDrag 才真正改 layout。
+        // 拖拽中通过 pageItemsWithDrag 实时把被拖图标移到几何落点（cursorSlot），
+        // 邻近图标以弹簧动画让位（实时让位效果）。落点由 GridGeometry 纯几何推导，
+        // 不依赖 measured frame / 快照，因此目标不会因让位而"逃跑"或漂移。
+        // 松手后 endDrag 用同一 move 语义落点，零跳变。
         let pageItems = viewModel.pageItemsWithDrag(pageIndex: pageIdx)
+        let hSpacing = effectiveHorizontalSpacing()
+        let vSpacing = effectiveVerticalSpacing()
 
-        return GridPageView(
-            items: pageItems,
-            apps: viewModel.allApps,
-            folders: viewModel.layout.folders,
-            columns: cols,
-            rows: rows,
-            hSpacing: effectiveHorizontalSpacing(), vSpacing: effectiveVerticalSpacing(),
-            iconSize: iconSize,
-            pageIndex: pageIdx,
-            selectedSlotIndex: viewModel.selectedSlotIndex,
-            isEditMode: viewModel.isEditMode,
-            dragState: viewModel.dragState,
-            viewModel: viewModel,
-            onTapApp: { viewModel.launch($0) },
-            onTapFolder: { folder in
-                guard expandedFolder == nil else { return }
-                viewModel.clearSelection()
-                withAnimation(.spring(duration: 0.25, bounce: 0.1)) { expandedFolder = folder }
-            },
-            onLongPress: { viewModel.enterEditMode() },
-            onBeginDrag: { id, loc in viewModel.beginDrag(bundleID: id, pageIndex: pageIdx, location: loc) },
-            onUpdateDragTarget: { slot, loc in viewModel.updateDragTarget(slotIndex: slot, location: loc) },
-            onEndDrag: { viewModel.endDrag() },
-            onDropOnFolder: { bundleID, folderID in
-                viewModel.addAppToFolder(bundleID: bundleID, folderID: folderID, pageIndex: pageIdx)
-            }
-        )
-        .offset(x: dragOffsetX)
+        return GeometryReader { geo in
+            let gRect = geo.frame(in: .global)
+            let cellW = (gRect.width - hSpacing * CGFloat(cols - 1)) / CGFloat(cols)
+            let cellH = (gRect.height - vSpacing * CGFloat(rows - 1)) / CGFloat(rows)
+            // 写入网格几何（@ObservationIgnored，变更不触发重渲染）。
+            // 拖拽期间网格容器不移动，该几何稳定，落点完全确定。
+            viewModel.gridGeometry = GridGeometry(
+                origin: gRect.origin,
+                size: gRect.size,
+                columns: cols,
+                rows: rows,
+                cellW: cellW,
+                cellH: cellH,
+                hSpacing: hSpacing,
+                vSpacing: vSpacing,
+                iconSize: iconSize
+            )
+            return GridPageView(
+                items: pageItems,
+                apps: viewModel.allApps,
+                columns: cols,
+                rows: rows,
+                hSpacing: hSpacing, vSpacing: vSpacing,
+                iconSize: iconSize,
+                pageIndex: pageIdx,
+                selectedSlotIndex: viewModel.selectedSlotIndex,
+                isEditMode: viewModel.isEditMode,
+                dragState: viewModel.dragState,
+                viewModel: viewModel,
+                onTapApp: { viewModel.launch($0) },
+                onLongPress: { viewModel.enterEditMode() },
+                onBeginDrag: { id, loc in viewModel.beginDrag(bundleID: id, pageIndex: pageIdx, location: loc) },
+                onUpdateDragTarget: { _, loc in viewModel.updateDragTarget(location: loc) },
+                onEndDrag: { viewModel.endDrag() }
+            )
+            .offset(x: dragOffsetX)
+        }
+        .clipped()
         // 注意：这里刻意不加 `.id(currentPageIndex)`。
         // 原先靠 .id + transition 实现翻页滑动动画，但翻页会改变视图身份，
         // 把正在拖拽的图标（及其手势）整个销毁重建，导致「拖到第二页就卡死」。
-        // 现在翻页改为原地切换内容（同实例），并把拖拽手势宿主上移到 GridPageView 层级，
+        // 现在翻页改为原地切换内容（同实例），并把拖拽手势宿主上移到 LaunchpadView 根层级，
         // 这样翻页时手势不随被拖 app 的视图重建而中断。
         // 代价是翻页动画变为即时切换（功能优先于滑动特效）。
     }
