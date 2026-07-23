@@ -150,39 +150,33 @@ final class DragController {
         }
     }
 
-    /// 拖拽时返回当前页的"视觉排列"（让位预览数据源）。实时让位(make-way)始终开启：
-    /// 被拖图标从源位移到 cursorSlot（同页），其余 app 让位推开；跨页目标页把被拖 app
-    /// 作为占位插入 cursorSlot。
+    /// 拖拽时返回当前页的"视觉排列"（让位预览数据源）。
+    /// 同页：移除被拖 app 并插入 cursorSlot 让位；
+    /// 翻页后目标页：把被拖 app 作为占位插入 cursorSlot 让位。
     func pageItemsWithDrag(pageIndex: Int) -> [LayoutItem] {
         guard data.dragState.isDragging,
-              data.dragState.sourcePageIndex == pageIndex,
               pageIndex < data.layout.pages.count else {
             return pageIndex < data.layout.pages.count ? data.layout.pages[pageIndex] : []
         }
-        // 让位始终进行：光标压在哪格 appA 就在哪格，appB 被推开不弹回。
-        let src = data.dragState.sourceSlotIndex
-        let to = data.dragState.cursorSlot
 
         if pageIndex == data.dragState.sourcePageIndex {
-            // 同页移动：先移除源，再按用户光标几何槽位 to 直接插入（与跨页预览/落点一致）。
-            // 关键：必须用 `to` 而不是经典 splice 的 `to > src ? to - 1`。
-            // 后者会把 Typora 推到光标左边一格（向右拖时 Typora 落后一格 → "没正确落位"）；
-            // UX 上"光标在哪儿 app 就在哪儿"= insert at to（原 to 位置的 app 被推到 to+1）。
+            // 源页：把被拖 app 从原位拔出、插到当前光标槽位 — 其余 app 让位推开
+            let src = data.dragState.sourceSlotIndex
+            let to  = data.dragState.cursorSlot
             var items = data.layout.pages[pageIndex]
             guard src < items.count else { return items }
             let item = items.remove(at: src)
-            let insertAt = to
-            items.insert(item, at: min(max(insertAt, 0), items.count))
+            items.insert(item, at: min(max(to, 0), items.count))
+            return items
+        } else if data.currentPageIndex == pageIndex {
+            // 翻页后的目标页：占位插入 cursorSlot 让本页 app 推开
+            let to = data.dragState.cursorSlot
+            var items = data.layout.pages[pageIndex]
+            items.insert(.app(bundleID: data.dragState.draggedBundleID),
+                         at: min(max(to, 0), items.count))
             return items
         } else {
-            // 跨页目标页：被拖 app 不在本页，作为占位插入 cursorSlot 预览缺口
-            guard let dragged = data.layout.pages[data.dragState.sourcePageIndex]
-                .first(where: { $0 == .app(bundleID: data.dragState.draggedBundleID) }) else {
-                return data.layout.pages[pageIndex]
-            }
-            var items = data.layout.pages[pageIndex]
-            items.insert(dragged, at: min(to, items.count))
-            return items
+            return data.layout.pages[pageIndex]
         }
     }
 }
