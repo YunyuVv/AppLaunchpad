@@ -438,6 +438,7 @@
 					"@executable_path/../Frameworks",
 				);
 				MACOSX_DEPLOYMENT_TARGET = 26.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.biliww.applaunchpad;
 				PRODUCT_NAME = AppLaunchpad;
 				SDKROOT = macosx;
 			};
@@ -455,6 +456,7 @@
 					"@executable_path/../Frameworks",
 				);
 				MACOSX_DEPLOYMENT_TARGET = 26.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.biliww.applaunchpad;
 				PRODUCT_NAME = AppLaunchpad;
 				SDKROOT = macosx;
 			};
