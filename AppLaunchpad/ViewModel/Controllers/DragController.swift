@@ -243,11 +243,20 @@ final class DragController {
 
         if dstPage < data.layout.pages.count {
             var dstItems = data.layout.pages[dstPage]
-            // 与 pageItemsWithDrag 预览完全一致：光标在哪儿 app 落在哪儿。
-            // 之前同页走 `to > src ? to - 1` 会让 Typora 松手后偏左一格
-            // （向右拖时光标已到 col3、Typora 落到 col2 → "没正确落位"）。
-            let effectiveDst = to
-            dstItems.insert(item, at: min(effectiveDst, dstItems.count))
+            // 跨页防重复：目标页若已有同名 .app（之前 folder 拖出/历史 bug 留下的副本），
+            // 先全部移除，避免 endDrag 插入后产生「两个一样的 app」。
+            if sourcePage != dstPage,
+               case .app(let id) = item {
+                dstItems.removeAll {
+                    if case .app(let other) = $0, other == id { return true }
+                    return false
+                }
+            }
+            // 与 pageItemsWithDrag 预览完全一致：clamp 到 itemsPerPage-1 而非 dstItems.count。
+            // 之前用 dstItems.count 在不满页时会让「视觉落点 itemsPerPage-1」与「实际插入 count-1」
+            // 不一致 → 用户拖到最后一排右侧，app 实际落在倒数第二排末尾 → 「看不见，翻页回来才看见」。
+            let effectiveDst = min(max(to, 0), layoutService.itemsPerPage - 1)
+            dstItems.insert(item, at: effectiveDst)
             data.layout.pages[dstPage] = dstItems
         } else {
             // 异常情况：目标页不存在，把 app 放回源页原位
@@ -309,7 +318,7 @@ final class DragController {
             var items = data.layout.pages[pageIndex]
             guard src < items.count else { return items }
             let item = items.remove(at: src)
-            items.insert(item, at: min(max(to, 0), items.count))
+            items.insert(item, at: min(max(to, 0), layoutService.itemsPerPage - 1))
             return items
         } else if data.currentPageIndex == pageIndex {
             // 翻页后的目标页：根据拖拽项类型插入对应占位（app 或 folder）
@@ -319,7 +328,7 @@ final class DragController {
                 ? .folder(id: data.dragState.draggedFolderID ?? UUID())
                 : .app(bundleID: data.dragState.draggedBundleID)
             items.insert(placeholder,
-                         at: min(max(to, 0), items.count))
+                         at: min(max(to, 0), layoutService.itemsPerPage - 1))
             return items
         } else {
             return data.layout.pages[pageIndex]
