@@ -94,6 +94,9 @@ struct GridPageView: View {
         case .folder(let folderID):
             if let folder = viewModel.folderInfo(for: folderID) {
                 let isHoverTarget = dragState.hoverTargetFolderID == folderID
+                // 与 app case 对称：拖拽中的源文件夹在网格里完全透明（lift state），
+                // 只让跟随光标的 chrome-free 浮窗可见，避免「两个 Books」残影。
+                let isDragged = dragState.isDragging && dragState.draggedFolderID == folderID
                 FolderThumbnailView(
                     folder: folder,
                     apps: apps,
@@ -105,6 +108,7 @@ struct GridPageView: View {
                     onDelete: { viewModel.deleteFolder(folderID, expandToPage: pageIndex) }
                 )
                 .scaleEffect(isHoverTarget ? 1.15 : 1.0)
+                .opacity(isDragged ? 0.0 : 1.0)
                 .animation(.easeOut(duration: 0.15), value: isHoverTarget)
                 .frame(width: cellWidth, height: cellHeight)
             } else {
