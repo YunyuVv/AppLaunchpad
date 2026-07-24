@@ -147,7 +147,7 @@ final class DragController {
         guard edgeScrollTimer == nil else { return }   // 已有计时器，不重复创建
         // 同样必须加到 .common mode：拖拽中 runloop 在事件追踪模式，default-mode Timer 不 fire，
         // 否则拖到屏幕边缘永远不自动翻页（无法把 app 拖到下一页）。
-        let timer = Timer(timeInterval: 0.8, repeats: false) { [weak self] _ in
+        let timer = Timer(timeInterval: 0.5, repeats: false) { [weak self] _ in
             Task { @MainActor [weak self] in
                 guard let self else { return }
                 self.edgeScrollTimer = nil

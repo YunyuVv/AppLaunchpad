@@ -218,6 +218,7 @@ if pageIndex == sourcePageIndex {
 - Timer 必须加到 `.common` mode（拖拽中 RunLoop 在 tracking mode，`.default` 不 fire）
 - `flipPageWhileDragging` 重置 `cursorSlot = sourceSlotIndex` 再翻页
 - `stopEdgeScrollTimer()` 供 `exitEditMode` 调用
+- 优化方案详见 `翻页功能.md`（屏幕适配 / 延迟调优 / 翻页动画 / 边缘视觉反馈）
 
 ### 4.8 拖拽中禁止重建 layout.pages
 

@@ -10,6 +10,9 @@ struct LaunchpadView: View {
     @State private var dragOffsetX: CGFloat = 0
     @State private var isDragging = false
     @State private var expandedFolderID: UUID? = nil
+    /// 翻页过渡动画：方向性滑入 + 淡入（无需双页渲染）
+    @State private var pageTransitionOffset: CGFloat = 0
+    @State private var pageTransitionOpacity: Double = 1.0
     /// 拖拽起手状态：用 @GestureState 而非手势闭包内的局部变量。
     /// 原因：globalDragGesture 是计算属性，拖拽中 @Observable 频繁触发 body 重算会让手势
     /// 被反复重建，闭包局部变量随之被重置 → 松手时 onEnded 跑在"新实例"上、startBundleID 为 nil
@@ -363,15 +366,27 @@ struct LaunchpadView: View {
                 onEndDrag: { viewModel.endDrag() },
                 onTapFolder: { expandedFolderID = $0 }
             )
-            .offset(x: dragOffsetX)
+            .offset(x: dragOffsetX + pageTransitionOffset)
+            .opacity(pageTransitionOpacity)
         }
         .clipped()
+        .onChange(of: viewModel.currentPageIndex) { oldValue, newValue in
+            guard oldValue != newValue else { return }
+            let goingForward = newValue > oldValue
+            // 新页从翻页方向偏移 80px 处滑入 + 淡入：
+            // 瞬间设偏移 → spring 动画归零，产生方向性 slide-in 过渡。
+            // 无需双页渲染，不破坏拖拽手势（手势挂根层级，本层仅内容过渡）。
+            pageTransitionOffset = goingForward ? 80 : -80
+            pageTransitionOpacity = 0
+            withAnimation(.spring(duration: 0.35, bounce: 0.2)) {
+                pageTransitionOffset = 0
+                pageTransitionOpacity = 1.0
+            }
+        }
         // 注意：这里刻意不加 `.id(currentPageIndex)`。
         // 原先靠 .id + transition 实现翻页滑动动画，但翻页会改变视图身份，
         // 把正在拖拽的图标（及其手势）整个销毁重建，导致「拖到第二页就卡死」。
-        // 现在翻页改为原地切换内容（同实例），并把拖拽手势宿主上移到 LaunchpadView 根层级，
-        // 这样翻页时手势不随被拖 app 的视图重建而中断。
-        // 代价是翻页动画变为即时切换（功能优先于滑动特效）。
+        // 现在翻页改为单页渲染 + onChange 方向性滑入，手势不受影响。
     }
 
     // MARK: - 拖拽浮动图标
