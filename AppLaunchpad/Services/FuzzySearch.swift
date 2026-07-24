@@ -1,11 +1,20 @@
 import Foundation
 
-/// 轻量模糊搜索打分器。
+/// 轻量搜索打分器。
 ///
-/// 思路借鉴常见 fuzzy 匹配范式（归一化 + 分词 + 首字母缩写 + 子序列打分），
-/// 纯 Swift 自研实现，不依赖任何第三方库。对 displayName / bundleID 均可打分，
-/// 分数越高代表越相关（完全相等 1000 → 前缀 700 → token 前缀 520 →
-/// 首字母缩写 470 → 子序列 300+ → 包含 180）。
+/// 策略参考 macOS 原生启动台：只匹配 hasPrefix / contains，**不做子序列乱序匹配**。
+/// 原版的子序列打分（h-a-i 在不相邻位置也能命中）虽然"灵活"但会产生大量噪音——
+/// 例如搜 "hai" 会把 Screen Sharing（s-h-a-r-i-n-g）、The Unarchiver（t-h-e-a-r-c-h-i-v-e-r）、
+/// draw.io 的 bundleID（com.jgr**a**p**h**.dr**a**w**i**o.desktop）都搜出来，而真正含
+/// "hai" 子串的 app 反而排到后面。这与原生 Launchpad 行为相去甚远。
+///
+/// 现在的打分优先级（高→低）：
+/// - 完全相等 1000
+/// - 前缀匹配 700- 偏移
+/// - 子串包含 500   （**唯一**的"中间匹配"路径）
+/// - token 前缀 420
+/// - 首字母缩写 380
+/// - 不匹配 → nil
 struct FuzzySearcher {
     /// 归一化：去变音符/大小写/全角宽度，非字母数字统一转空格，再合并为连续串。
     static func normalize(_ value: String) -> String {
@@ -49,55 +58,30 @@ struct FuzzySearcher {
             return 700 - min(80, max(0, nt.count - nq.count))
         }
 
+        // 包含子串：500 分。仅当 hasPrefix 不命中时生效（位置靠后的"hai" 也能搜出来，
+        // 例如 bundleID "com.haima.cloudpc" 搜 "hai"、displayName "The Unarchiver"
+        // 搜 "arch" 等场景）。这与原生启动台行为一致——只匹配真正的子串，不过度泛化。
+        if nt.contains(nq) {
+            return 500
+        }
+
         let tokens = Self.tokenize(target)
         if let tokenIndex = tokens.firstIndex(where: { $0.hasPrefix(nq) }) {
-            return 520 - min(tokenIndex * 15, 120)
+            return 420 - min(tokenIndex * 15, 120)
         }
 
         let acr = Self.acronym(tokens)
         if !acr.isEmpty, acr.hasPrefix(nq) {
-            return 470 - min(max(0, acr.count - nq.count) * 10, 80)
+            return 380 - min(max(0, acr.count - nq.count) * 10, 80)
         }
 
-        if let subsequenceScore = subsequenceScore(query: nq, target: nt) {
-            return subsequenceScore
-        }
-
-        if nt.contains(nq) {
-            return 180
-        }
-
+        // 不做子序列乱序匹配：之前太宽松导致搜 "hai" 把 Screen Sharing / The Unarchiver /
+        // draw.io 等完全无关的 app 全搜出来。详见文件头注释。
         return nil
     }
 
-    /// 子序列匹配：query 的字符按顺序全出现在 target 中。
-    /// 越紧凑、越靠前、越连续，分数越高。分散度过大会被丢弃以降噪。
+    /// 占位空实现（保留以备将来扩展）。原版实现见 git history。
     private func subsequenceScore(query: String, target: String) -> Int? {
-        var positions: [Int] = []
-        var searchStart = target.startIndex
-
-        for character in query {
-            guard let matchIndex = target[searchStart...].firstIndex(of: character) else {
-                return nil
-            }
-            positions.append(target.distance(from: target.startIndex, to: matchIndex))
-            searchStart = target.index(after: matchIndex)
-        }
-
-        guard let first = positions.first, let last = positions.last else { return nil }
-
-        let span = last - first + 1
-        let gaps = max(0, span - query.count)
-        // 过滤极度分散的匹配（如长名中零星出现的字符），降低噪音。
-        guard gaps <= query.count * 3 else { return nil }
-
-        let adjacencyCount = zip(positions, positions.dropFirst()).reduce(0) { partial, pair in
-            partial + (pair.1 == pair.0 + 1 ? 1 : 0)
-        }
-        let leadingBonus = max(0, 40 - first * 2)
-        let compactnessBonus = max(0, 80 - gaps * 5)
-        let adjacencyBonus = adjacencyCount * 12
-
-        return 300 + leadingBonus + compactnessBonus + adjacencyBonus
+        return nil
     }
 }
