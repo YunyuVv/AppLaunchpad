@@ -87,7 +87,10 @@ struct FolderExpandedView: View {
                 // 面板取屏宽 55%（之前 70% 偏胖）：narrower → 同屏宽下每行自然容纳列数变少，
                 // 完全由面板宽/格宽/间距动态决定，没有人为列数上限。
                 let panelW = geo.size.width * 0.55
-                let panelH = geo.size.height * 0.7
+                let panelH = geo.size.height * 0.8
+                // 面板顶部预留：避开屏幕顶部的搜索框（其底部约在 autoTopPadding + 搜索栏高(~38) 处），
+                // 并额外留 18pt 间距，避免面板贴住/压住搜索框。与 LaunchpadView.autoTopPadding 同公式。
+                let topInset = max(56, geo.size.height * 0.07) + 56
 
                 VStack(spacing: 0) {
                     Text(folder.name)
@@ -106,7 +109,7 @@ struct FolderExpandedView: View {
                     RoundedRectangle(cornerRadius: 16)
                         .stroke(.white.opacity(0.12), lineWidth: 0.5)
                 )
-                .position(x: geo.size.width / 2, y: geo.size.height / 2)
+                .position(x: geo.size.width / 2, y: topInset + panelH / 2)
                 // 面板 frame = 外层 GeometryReader 填满全屏 → 计算 70% 居中区域的全局坐标。
                 // 用 onAppear 写入引用类型 FrameBox，手势闭包通过指针始终读到最新值
                 // （避免值类型 @State 被手势创建时快照捕获 → 永远是 .zero 的经典陷阱）。
@@ -114,7 +117,7 @@ struct FolderExpandedView: View {
                     let globalOrigin = geo.frame(in: .global).origin
                     panelFrameBox.frame = CGRect(
                         x: globalOrigin.x + (geo.size.width - panelW) / 2,
-                        y: globalOrigin.y + (geo.size.height - panelH) / 2,
+                        y: globalOrigin.y + topInset,
                         width: panelW, height: panelH
                     )
                 }
@@ -250,7 +253,9 @@ struct FolderExpandedView: View {
             }
             // 顶端左对齐（行数少时不再垂直居中，符合原生 Launchpad 风格）：
             // 满行自然从左起排到右；不满行也从最左起，新加 app 继续在下一行最左出现。
-            .frame(maxWidth: .infinity, maxHeight: availableH, alignment: .topLeading)
+            // 注意：此处不可加 maxHeight 上限——会让内容被截断而非滚动；
+            // ScrollView 的视口高度由下方 .frame(height: availableH) 约束，内容超出即纵向滚动。
+            .frame(maxWidth: .infinity, alignment: .topLeading)
             // 弹簧让位动画（与主网格 GridPageView 参数一致）
             .animation(.spring(response: 0.3, dampingFraction: 0.9), value: visualApps.map(\.bundleID))
         }
