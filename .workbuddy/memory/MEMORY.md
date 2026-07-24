@@ -13,24 +13,28 @@
 - 依赖单向：View→根VM→Controller/Data；Controller 之间互不引用。新增功能进对应 Controller，勿回塞根 VM。
 - `Utils/Array+Chunked.swift` 收敛重复 `chunked`。
 
-## 文件夹功能（2026-07-23 已彻底移除）
-- **移除**：`FolderController.swift` / `Views/FolderThumbnailView.swift` / `Views/FolderExpandedView.swift` 三个文件 + `DragState.folderHoverID`/`DragContext` 字段 + `DragController` 的 folders 依赖 + 所有文件夹 UI/手势/方法转发。
-- **保留（惰性数据骨架，仅为将来扩展）**：`LayoutItem.folder` 枚举项、`LayoutData.folders` 字典、`FolderInfo` 类型。运行时 `LayoutService.mergeLayout` 把遗留 `.folder` 槽位展开为内部 app 并将 `folders` 置空 → 运行时永远不出现文件夹，兼容旧 `layout.json`。
-- **未来恢复**（如需）：重建上述 3 个文件 + `DragController` 加回 folders 依赖 + 改回 `mergeLayout` 保留 folders + `endDrag` 加回 `folderHoverID` 归入分支即可，数据格式与持久化层无需动。
+## 文件夹功能（2026-07-25 已彻底清理完成）
+- **完全移除**：`FolderController.swift` / `Views/FolderThumbnailView.swift` / `Views/FolderExpandedView.swift` 三个文件 + `LayoutData.folders` 运行时永远空 + `DragState.draggedFolderID/hoverTargetFolderID` 字段保留作数据兼容 + `LayoutItem.folder` enum case 保留作兼容（`GridPageView.case .folder: Color.clear` 兜底）。
+- **运行时**：`LayoutService.mergeLayout` 把 .folder 槽位按 `saved.folders` 字典展开为内部 .app（按 appIDs 顺序，已卸载静默丢弃）→ `folders: [:]` 强制置空。**layout.json 一旦被 mergeLayout 处理过，pages 里 0 个 .folder**。
+- **历史污染**：早期版本写出的 layout.json 含 `[key, dict, key, dict]` 异常格式的 `folders` 字段（Swift JSONDecoder 容错解码为 dict）+ pages 里散落 .folder 槽位。**Python 迁移脚本**：备份 `.folderclean.bak` → 解析 folders（支持 list-of-pairs）→ 展开 .folder 为 .app → folders 置空 → 写回。
+- **未来恢复**（如需）：重建上述 3 个文件 + `DragController` 加回 `folderController` 依赖 + `LaunchpadView` 加回 `expandedFolderID`/overlay/4 处 `onTapFolder`/floatingDragIcon folder 分支 + `LayoutService.mergeLayout` 改回保留 folders + `endDrag` 加回"创建文件夹/添加到文件夹"分支即可。数据格式与持久化层无需动。
+
+## 拖拽 clamp（2026-07-25 红线）
+- **`pageItemsWithDrag` / `endDrag` clamp 一律用 `items.count`（= remove 后的 count）**，**绝不**用 `itemsPerPage - 1` —— 满页时结果一样；**不满页时** `itemsPerPage - 1` 远大于 count → `items.insert(at: 越界值)` 崩溃（thread 1 Array index out of range）。`min(max(to, 0), items.count)` 满/不满统一：满页时 = itemsPerPage-1 = 视觉最后一格；不满页时 = 末尾 append（to 越界时等价 append 合法）。
+- 跨页拖拽 `sourcePage != dstPage` 时必须 `dstItems.removeAll` 同名 .app（避免历史 bug 留下的副本被插入变成两份）。同页不需要（src 已被 `srcItems.remove` 移走）。
+- 拖拽手势状态必须放 `@State` / `@GestureState`，绝不可放计算属性闭包的 `var`（@Observable 拖拽中频繁重算 body → 手势每次重建 → 闭包局部变量重置 → onEnded 跑在新实例上 guard 失败 → endDrag 未执行 → app 弹回 + isDragging 卡死）。
+- 用户截图里的崩溃 PID（如 56719）实际**未真崩**——Xcode debug session 状态 ≠ app 进程退出，验证 app 健康应 `kill -0 $PID`（PID 56719 一直存活）。
 
 ## 拖拽落点几何化（关键）
 - 纯几何 `GridGeometry`（origin/cols/rows/cellW/cellH/spacing/iconSize）：落点 `slotUnderCursor` 由光标坐标 `row*cols+col` 推导；`iconRect(forSlot:)` 得图标 footprint 区分「压图标」vs「间隙」。`LaunchpadView.pagingView` 用 `GeometryReader` 写 `viewModel.gridGeometry`（标 `@ObservationIgnored` 防死循环）。
 - `DragState.cursorSlot` 驱动 make-way 弹簧（来自固定几何、不漂移）。`appAtIconPoint`(起手/翻页)、`slotUnderCursor`(落点) 取代 measured frame/`nearestSlot`。
-- **预览与落点统一 `insert at to`**（`to`=光标几何槽位）。曾用 `to>src?to-1` 致向右拖偏左一格，已统一为 `to`。
+- **预览与落点统一 `insert at to`**（`to`=光标几何槽位）。
 - 手势宿主在 `LaunchpadView` 根 `ZStack`（`.simultaneousGesture(globalDragGesture+pagingDragGesture)`）；勿挂回单个 app 或 `GridPageView`（items 变→手势取消→跨页卡死）。
-- **make-way 常驻、不弹回（2026-07-23）**：`DragController.pageItemsWithDrag` 不再因任何 target 标记返回原始排列。被拖图标从源位移到 `cursorSlot`（同页），其余 app 让位推开不弹回；仅 `cursorSlot` 变化（被拖 app 拖离）时其它 app 才归位。`endDrag` 一律按 `cursorSlot` 重排。
-- **app 重排 = 光标落点（2026-07-23）**：拖拽只做"app 在网格内重排"一件事。`updateDragTarget` 用 `slotUnderCursor` 算 `cursorSlot`；`endDrag` 一律 `insert at to`。已无任何"建文件夹/归入"入口与蓝圈/白环高亮——该功能彻底移除（见上节"文件夹功能"）。
-- 红线：落点绝不用 measured frame/快照/最近中心；新增落点需求走 `gridGeometry`。
-- **松手落点必须用松手瞬间精确坐标（2026-07-23）**：`globalDragGesture.onEnded` 先 `updateDragTarget(location: value.location)` 再 `endDrag()`；`endDrag` 重排分支再以 `geo.slotUnderCursor(dragState.dragLocation)` 兜底重算 `to`。原因：SwiftUI `onEnded` 不保证松手前再发一次 `onChanged`，最后一段位移会让 `cursorSlot` 落后一格→"落不到正位/有点偏离"。
-- **拖拽中禁止重建 layout.pages（2026-07-23，审计报告 4.5）**：`LayoutService.refreshApps` 在 `data.dragState.isDragging` 时置 `data.pendingAppsRefresh` 并 `return`，不重建 `pages`（否则 `sourceSlotIndex`/`cursorSlot` 失效→落点错乱/被冲掉）。`DragController` 新增 `layoutService` 依赖，`endDrag` 复位 `dragState` 后若 `pendingAppsRefresh` 则补 `Task{await layoutService.refreshApps()}`，保留刚排好顺序。`LaunchpadData.pendingAppsRefresh` 标 `@ObservationIgnored`。
-- **拖拽手势状态必须放 `@State` / `@GestureState`，绝不可放计算属性闭包的 `var`（2026-07-23 关键 bug）**：`LaunchpadView.globalDragGesture` 曾用闭包内 `var hasCheckedStart / var startBundleID`，`@Observable` 拖拽中频繁重算 `body` → 手势每次重建 → 局部变量被重置 → `onEnded` 跑在新实例上 `startBundleID=nil` → `guard` 失败 → `endDrag()` 未执行 → ①app 弹回原位（"没有正确落位"）②`dragState.isDragging` 卡 true → 后续点击被守卫挡掉（"松手后无法点击，需先点别处"）。修法：起手判定状态用 `@GestureState private var dragStart: (checked: Bool, bundleID: String?)`，通过 `.updating($dragStart) { value, state, _ in ... }` 写入，`onEnded` 读 `dragStart.bundleID`。`@GestureState` 是视图级状态、跨 body 重算保留，且为拖拽设计、写它不会中断手势。
-- **松手 transition 残影（2026-07-23）**：`floatingDragIcon` 用了 `.transition(.opacity)`，配合 `GridPageView.body` 的 `.animation(.spring, value: cursorSlot)` 在松手时（cursorSlot 从让位值 → 0）触发整网 spring → transition 渐隐期间浮动图标仍渲染在光标位置（"松开就停留在这个地方了, 没有落在正中心"）。修法：①根视图加 `.animation(.interactiveSpring(response: 0.35, dampingFraction: 0.82), value: dragState.isDragging)` 让松手时 transition 与让位回位用同一段 spring 驱动；②`globalDragGesture.onEnded` 用 `withAnimation(.interactiveSpring(...))` 包裹 `viewModel.endDrag()`；③`GridPageView.body` 的 `.animation(_, value: cursorSlot)` 改为 `.animation(_, value: items)`（让位布局与最终布局顺序一致 = insert at to，松手瞬间 items 数组不变 → spring 不触发 → 无残影）。
-- **`GridPageView.iconCell` 每个格子必须固定为 `cellW × cellH`（2026-07-23 红线）**：否则视觉格点与 `gridGeometry` 错位 → 布局乱 / 不全屏 / 拖拽落点对不上。
+- **make-way 常驻、不弹回**：`DragController.pageItemsWithDrag` 不再因任何 target 标记返回原始排列。被拖图标从源位移到 `cursorSlot`（同页），其余 app 让位推开不弹回；仅 `cursorSlot` 变化（被拖 app 拖离）时其它 app 才归位。`endDrag` 一律按 `cursorSlot` 重排。
+- **拖拽中禁止重建 layout.pages**：`LayoutService.refreshApps` 在 `data.dragState.isDragging` 时置 `data.pendingAppsRefresh` 并 `return`，不重建 `pages`（否则 `sourceSlotIndex`/`cursorSlot` 失效→落点错乱/被冲掉）。`DragController` 注入 `layoutService` 依赖，`endDrag` 复位 `dragState` 后若 `pendingAppsRefresh` 则补 `Task{await layoutService.refreshApps()}`，保留刚排好顺序。`LaunchpadData.pendingAppsRefresh` 标 `@ObservationIgnored`。
+- **松手落点必须用松手瞬间精确坐标**：`globalDragGesture.onEnded` 先 `updateDragTarget(location: value.location)` 再 `endDrag()`；`endDrag` 重排分支再以 `geo.slotUnderCursor(dragState.dragLocation)` 兜底重算 `to`。原因：SwiftUI `onEnded` 不保证松手前再发一次 `onChanged`，最后一段位移会让 `cursorSlot` 落后一格→"落不到正位/有点偏离"。
+- **松手 transition 残影**：①根视图加 `.animation(.interactiveSpring(response: 0.35, dampingFraction: 0.82), value: dragState.isDragging)` 让松手时 transition 与让位回位用同一段 spring 驱动；②`globalDragGesture.onEnded` 用 `withAnimation(.interactiveSpring(...))` 包裹 `viewModel.endDrag()`；③`GridPageView.body` 的 `.animation(_, value: items)` 让让位布局与最终布局顺序一致 = insert at to，松手瞬间 items 数组不变 → spring 不触发 → 无残影。
+- **`GridPageView.iconCell` 每个格子必须固定为 `cellW × cellH`**：否则视觉格点与 `gridGeometry` 错位 → 布局乱 / 不全屏 / 拖拽落点对不上。
 
 ## 设置窗口
 - `Window("设置",id:"settings")`+`NavigationSplitView`+`.listStyle(.sidebar)`；入口经 `AppDelegate.openSettings()`→`settingsOpener`→`openWindow(id:)`（**绝不用 `showWindow:`**，Dock 菜单下失效）。打开降面板层级、关闭恢复。

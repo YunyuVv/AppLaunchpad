@@ -242,7 +242,7 @@ struct LaunchpadView: View {
             .onChanged { value in
                 // 起点压在任何图标（app 或文件夹）：交给 globalDragGesture 或点击，这里让行，不翻页。
                 // 落在 cell 间隙 / 网格外则正常翻页。
-                guard !viewModel.isSearching, !viewModel.isEditMode,
+                guard !viewModel.isSearching,
                       !viewModel.dragState.isDragging,
                       !viewModel.anyItemAtIconPoint(value.startLocation) else {
                     dragOffsetX = 0
@@ -253,7 +253,7 @@ struct LaunchpadView: View {
                 isDragging = true
             }
             .onEnded { value in
-                guard !viewModel.isSearching, !viewModel.isEditMode,
+                guard !viewModel.isSearching,
                       !viewModel.dragState.isDragging,
                       !viewModel.anyItemAtIconPoint(value.startLocation) else {
                     dragOffsetX = 0

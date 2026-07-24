@@ -227,7 +227,7 @@ final class DragController {
             return
         }
 
-        // ── 分支 3：普通重排（现有逻辑，不变）──
+        // ── 分支 3：普通重排 ──
         let src = data.dragState.sourceSlotIndex
         var to = data.dragState.cursorSlot
         if let geo = data.gridGeometry {
@@ -252,10 +252,10 @@ final class DragController {
                     return false
                 }
             }
-            // 与 pageItemsWithDrag 预览完全一致：clamp 到 itemsPerPage-1 而非 dstItems.count。
-            // 之前用 dstItems.count 在不满页时会让「视觉落点 itemsPerPage-1」与「实际插入 count-1」
-            // 不一致 → 用户拖到最后一排右侧，app 实际落在倒数第二排末尾 → 「看不见，翻页回来才看见」。
-            let effectiveDst = min(max(to, 0), layoutService.itemsPerPage - 1)
+            // clamp 用 dstItems.count 而非 itemsPerPage-1：满页时两者相等；不满页时 itemsPerPage-1
+            // 远大于 count 导致越界崩溃。用 dstItems.count 覆盖满/不满两种场景，永不越界。
+            // （P0 修复，2026-07-25）
+            let effectiveDst = min(max(to, 0), dstItems.count)
             dstItems.insert(item, at: effectiveDst)
             data.layout.pages[dstPage] = dstItems
         } else {
@@ -312,13 +312,15 @@ final class DragController {
 
         // ── 排序模式：正常 make-way ──
         if pageIndex == data.dragState.sourcePageIndex {
-            // 源页：把被拖 app 从原位拔出、插到当前光标槽位 �� 其余 app 让位推开
+            // 源页：把被拖 app 从原位拔出、插到当前光标槽位  其余 app 让位推开
             let src = data.dragState.sourceSlotIndex
             let to  = data.dragState.cursorSlot
             var items = data.layout.pages[pageIndex]
             guard src < items.count else { return items }
             let item = items.remove(at: src)
-            items.insert(item, at: min(max(to, 0), layoutService.itemsPerPage - 1))
+            // clamp 用 items.count：满页时 = itemsPerPage-1；不满页时自动 append 到末尾。
+            // （P0 修复，2026-07-25）
+            items.insert(item, at: min(max(to, 0), items.count))
             return items
         } else if data.currentPageIndex == pageIndex {
             // 翻页后的目标页：根据拖拽项类型插入对应占位（app 或 folder）
@@ -327,8 +329,7 @@ final class DragController {
             let placeholder: LayoutItem = data.dragState.draggedItemType == .folder
                 ? .folder(id: data.dragState.draggedFolderID ?? UUID())
                 : .app(bundleID: data.dragState.draggedBundleID)
-            items.insert(placeholder,
-                         at: min(max(to, 0), layoutService.itemsPerPage - 1))
+            items.insert(placeholder, at: min(max(to, 0), items.count))
             return items
         } else {
             return data.layout.pages[pageIndex]
