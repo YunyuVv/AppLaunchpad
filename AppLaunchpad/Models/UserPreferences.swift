@@ -128,6 +128,19 @@ final class UserPreferences: @unchecked Sendable {
         didSet { defaults.set(hotkeyKeyLabel, forKey: Keys.hotkeyKeyLabel) }
     }
 
+    // MARK: - 翻页手势
+
+    /// 触控板双指横扫翻页的跟手增益。
+    /// 1.0 = 1:1 跟手（手指滑多少页就移多少，最自然但最费手指）；
+    /// 越大 = 手指少滑一点就能跟满整页，越省力。默认 4.0。范围 1.0 ~ 8.0。
+    var trackpadPagingGain: Double = 4.0 {
+        didSet {
+            let v = trackpadPagingGain.clamped(to: 1...8)
+            if v != trackpadPagingGain { trackpadPagingGain = v }
+            defaults.set(trackpadPagingGain, forKey: Keys.trackpadPagingGain)
+        }
+    }
+
     // MARK: - 初始化（从 UserDefaults 载入，带默认值与范围约束）
 
     private init() {
@@ -148,6 +161,9 @@ final class UserPreferences: @unchecked Sendable {
             : UInt(NSEvent.ModifierFlags.option.rawValue)
         hotkeyKeyCode            = d.object(forKey: Keys.hotkeyKeyCode) != nil ? UInt(d.integer(forKey: Keys.hotkeyKeyCode)) : 49
         hotkeyKeyLabel           = d.string(forKey: Keys.hotkeyKeyLabel)
+        trackpadPagingGain       = d.object(forKey: Keys.trackpadPagingGain) != nil
+            ? d.double(forKey: Keys.trackpadPagingGain).clamped(to: 1...8)
+            : 4.0
         isCapturingHotkey        = false
     }
 
@@ -254,6 +270,7 @@ final class UserPreferences: @unchecked Sendable {
         static let hotkeyModifiers          = "hotkeyModifiers"
         static let hotkeyKeyCode            = "hotkeyKeyCode"
         static let hotkeyKeyLabel           = "hotkeyKeyLabel"
+        static let trackpadPagingGain       = "trackpadPagingGain"
     }
 }
 

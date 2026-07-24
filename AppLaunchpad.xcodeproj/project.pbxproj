@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		016083DB42E86EB2EEAD6EF2 /* GesturePane.swift in Sources */ = {isa = PBXBuildFile; fileRef = 28CAC4A6DFB374E326C1B7D3 /* GesturePane.swift */; };
 		02F15AEC9E7FAE34A96F0D31 /* LaunchpadData.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2BAB486B8C316F3029ECDF70 /* LaunchpadData.swift */; };
 		1468118946B482229EFFF870 /* IconCache.swift in Sources */ = {isa = PBXBuildFile; fileRef = C9E6F8441A87939DD7AD5F64 /* IconCache.swift */; };
 		264E5AED4ADD07EFC41B62E3 /* DragState.swift in Sources */ = {isa = PBXBuildFile; fileRef = FCE6821DCD64715CC5D42BD7 /* DragState.swift */; };
@@ -55,6 +56,7 @@
 		1C8F6EC646880B2A114FF0F9 /* NavigationController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NavigationController.swift; sourceTree = "<group>"; };
 		20008FEB2ECB7E9946A99CBD /* AppScanner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppScanner.swift; sourceTree = "<group>"; };
 		2481B06DA5521D3CE3F58222 /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppDelegate.swift; sourceTree = "<group>"; };
+		28CAC4A6DFB374E326C1B7D3 /* GesturePane.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GesturePane.swift; sourceTree = "<group>"; };
 		29DA6E86F68953D4ED4D5C25 /* SearchBarView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SearchBarView.swift; sourceTree = "<group>"; };
 		2BAB486B8C316F3029ECDF70 /* LaunchpadData.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LaunchpadData.swift; sourceTree = "<group>"; };
 		2E5B3C357AB3EC50D06B1272 /* DragController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DragController.swift; sourceTree = "<group>"; };
@@ -108,6 +110,7 @@
 				439337F86B0F122797545C77 /* AboutPane.swift */,
 				CFB9F1B73597C6472AF498B4 /* AppearancePane.swift */,
 				B2AA13E2499E45A28C0DD504 /* DisplayPane.swift */,
+				28CAC4A6DFB374E326C1B7D3 /* GesturePane.swift */,
 				44FE080088B707856429D068 /* HotkeyPane.swift */,
 				98E9B4A87A31911FCDA8D5A5 /* SettingsView.swift */,
 			);
@@ -329,6 +332,7 @@
 				57358A506850347036CE583E /* FolderInfo.swift in Sources */,
 				97784A363D6E485702042EEF /* FolderThumbnailView.swift in Sources */,
 				8CA01FD0069796C6ACBB9D30 /* FuzzySearch.swift in Sources */,
+				016083DB42E86EB2EEAD6EF2 /* GesturePane.swift in Sources */,
 				9C7539E2A45061F42D7BB817 /* GridGeometry.swift in Sources */,
 				30F2F846DB09A6EE9B5D3683 /* GridPageView.swift in Sources */,
 				8E06974C52D8B3515680E025 /* HotkeyPane.swift in Sources */,

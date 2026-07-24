@@ -199,20 +199,55 @@ final class LaunchpadWindowController {
             guard event.momentumPhase.isEmpty else { return event }  // 忽略惯性阶段
 
             if event.hasPreciseScrollingDeltas {
-                // ── 触控板：用 phase 全程累积 x 和 y，只在 .ended 时整体判断方向
+                // ── 触控板：双指横扫跟手平移（与原生 Launchpad 一致）──
+                // .changed 阶段把累积量实时映射为跟手偏移，驱动视图层「当前页 + 相邻页」平移；
+                // .ended 阶段按累积量阈值决定翻页（连续滑入）或弹簧回弹。
+                let pageW = (viewModel.gridGeometry?.size.width) ?? (NSScreen.main?.frame.width ?? 0)
                 switch event.phase {
                 case .began:
                     accumulatedScrollX = 0
                     accumulatedScrollY = 0
+                    viewModel.trackpadPagingOffsetX = 0
                 case .changed:
                     accumulatedScrollX += event.scrollingDeltaX
                     accumulatedScrollY += event.scrollingDeltaY
+                    // 映射为与 dragOffsetX 同语义的跟手偏移（负 = 看下一页）。
+                    // 左滑（自然滚动下 scrollingDeltaX<0 → accumulatedScrollX<0 → off<0）= 看下一页，对齐原生 Launchpad。
+                    // 增益：触控板累积量通常远小于整页宽，×gain 让页面明显跟手、更易越过翻页阈值。
+                    // 并 clamp 到 ±一页宽，避免一次大幅横扫拖出多页。
+                    let gain: CGFloat = UserPreferences.shared.trackpadPagingGain
+                    let off = max(-pageW, min(pageW, accumulatedScrollX * gain))
+                    viewModel.trackpadPagingOffsetX = off
                 case .ended, .cancelled:
                     let ax = abs(accumulatedScrollX)
                     let ay = abs(accumulatedScrollY)
-                    // 水平方向主导且幅度足够时翻页
-                    if ax > ay && ax > 20 {
-                        flipPage(deltaX: accumulatedScrollX > 0 ? 100 : -100)
+                    if ax > ay {
+                        // 水平主导：累计幅度超阈值则翻页，否则当前页弹簧回正中。
+                        // 方向与 .changed 一致（gain 后 virtualX<0 = 左滑 = 下一页），阈值用增益后位移判定。
+                        let gain: CGFloat = UserPreferences.shared.trackpadPagingGain
+                        let virtualX = accumulatedScrollX * gain
+                        let threshold = pageW * 0.10
+                        let goingNext = virtualX < 0
+                        let current = viewModel.currentPageIndex
+                        let total = viewModel.totalPages
+                        let target = goingNext ? min(current + 1, total - 1) : max(current - 1, 0)
+                        if abs(virtualX) > threshold, target != current {
+                            // 提交翻页意图（一次性）。视图层 onChange 同步设起点后 goToPage，
+                            // 复用鼠标拖拽的连续滑入，避免闪现正中。
+                            viewModel.trackpadPagingCommit = TrackpadPageFlip(
+                                offset: max(-pageW, min(pageW, virtualX)),
+                                target: target
+                            )
+                            viewModel.trackpadPagingOffsetX = 0
+                        } else {
+                            // 未越阈值：当前页弹簧回正中（视图层 ZStack 跟手渲染内动画回 0 → 自动切单页）
+                            withAnimation(.spring(duration: 0.4, bounce: 0.15)) {
+                                viewModel.trackpadPagingOffsetX = 0
+                            }
+                        }
+                    } else {
+                        // 垂直主导：直接归零（不翻页）
+                        viewModel.trackpadPagingOffsetX = 0
                     }
                     accumulatedScrollX = 0
                     accumulatedScrollY = 0

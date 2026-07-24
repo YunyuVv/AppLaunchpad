@@ -391,16 +391,19 @@ struct LaunchpadView: View {
                 onEndDrag: { viewModel.endDrag() },
                 onTapFolder: { expandedFolderID = $0 }
             )
-            if isDragging, dragOffsetX != 0 {
-                // 空白拖拽翻页进行中：当前页 + 相邻页并排，随拖拽平移，无空窗。
-                // 相邻页为纯展示（空回调 + 空 dragState），不触发 make-way，不影响落点。
+            let isPaging = (isDragging && dragOffsetX != 0) || (viewModel.trackpadPagingOffsetX != 0)
+            if isPaging {
+                // 跟手翻页进行中（鼠标空白拖拽 或 触控板双指横扫）：当前页 + 相邻页并排，
+                // 随偏移实时平移，无空窗。相邻页为纯展示（空回调 + 空 dragState），
+                // 不触发 make-way，不影响落点。
+                let off = isDragging ? dragOffsetX : viewModel.trackpadPagingOffsetX
                 let W = gRect.width
                 let total = viewModel.totalPages
                 let hasNext = pageIdx < total - 1
                 let hasPrev = pageIdx > 0
                 ZStack(alignment: .topLeading) {
-                    currentPage.offset(x: dragOffsetX)
-                    if hasNext, dragOffsetX < 0 {
+                    currentPage.offset(x: off)
+                    if hasNext, off < 0 {
                         GridPageView(
                             items: viewModel.pageItemsWithDrag(pageIndex: pageIdx + 1),
                             apps: viewModel.allApps,
@@ -415,9 +418,9 @@ struct LaunchpadView: View {
                             onBeginDrag: { _, _ in }, onUpdateDragTarget: { _, _ in }, onEndDrag: {},
                             onTapFolder: { _ in }
                         )
-                        .offset(x: dragOffsetX + W)
+                        .offset(x: off + W)
                     }
-                    if hasPrev, dragOffsetX > 0 {
+                    if hasPrev, off > 0 {
                         GridPageView(
                             items: viewModel.pageItemsWithDrag(pageIndex: pageIdx - 1),
                             apps: viewModel.allApps,
@@ -432,7 +435,7 @@ struct LaunchpadView: View {
                             onBeginDrag: { _, _ in }, onUpdateDragTarget: { _, _ in }, onEndDrag: {},
                             onTapFolder: { _ in }
                         )
-                        .offset(x: dragOffsetX - W)
+                        .offset(x: off - W)
                     }
                 }
             } else {
@@ -457,6 +460,23 @@ struct LaunchpadView: View {
                 pageTransitionOffset = 0
                 pageTransitionOpacity = 1.0
             }
+        }
+        // 触控板跟手翻页：消费 WindowController 在 .ended 写入的一次性翻页意图。
+        // 关键点与鼠标拖拽 onEnded 相同——必须在 goToPage 之前同步设好过渡起点
+        // （pendingFlipStart + pageTransitionOffset），否则 onChange(currentPageIndex) 异步回调前
+        // 先用旧偏移(0)渲染新当前页一帧 → 闪现正中。同步设到 start 后，新页第一帧即从
+        // 相邻页当时位置（手指松手处）连续滑入，与拖拽完全一致的观感。
+        .onChange(of: viewModel.trackpadPagingCommit) { _, new in
+            guard let c = new else { return }
+            let W = viewModel.gridGeometry?.size.width ?? 0
+            let goingNext = c.offset < 0
+            let start = goingNext ? (c.offset + W) : (c.offset - W)
+            pendingFlipStart = start
+            pageTransitionOffset = start
+            pageTransitionOpacity = 1.0
+            viewModel.trackpadPagingOffsetX = 0
+            viewModel.trackpadPagingCommit = nil
+            viewModel.goToPage(c.target)
         }
         // 注意：这里刻意不加 `.id(currentPageIndex)`。
         // 原先靠 .id + transition 实现翻页滑动动画，但翻页会改变视图身份，

@@ -75,6 +75,16 @@ final class LaunchpadViewModel {
     func goToNextPage() { data.goToNextPage() }
     func goToPage(_ index: Int) { data.goToPage(index) }
 
+    // 触控板跟手翻页：实时偏移 + 松手翻页意图（→ data）
+    var trackpadPagingOffsetX: CGFloat {
+        get { data.trackpadPagingOffsetX }
+        set { data.trackpadPagingOffsetX = newValue }
+    }
+    var trackpadPagingCommit: TrackpadPageFlip? {
+        get { data.trackpadPagingCommit }
+        set { data.trackpadPagingCommit = newValue }
+    }
+
     // MARK: - 编辑模式
 
     func enterEditMode() { data.isEditMode = true }

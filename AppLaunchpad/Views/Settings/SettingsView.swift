@@ -7,6 +7,7 @@ import ApplicationServices
 enum SettingsSection: String, CaseIterable, Identifiable, Hashable, Sendable {
     case appearance = "外观"
     case display    = "显示器"
+    case gesture    = "手势"
     case hotkey     = "快捷键"
     case about      = "关于"
 
@@ -16,6 +17,7 @@ enum SettingsSection: String, CaseIterable, Identifiable, Hashable, Sendable {
         switch self {
         case .appearance: return "paintbrush"
         case .display:    return "display"
+        case .gesture:    return "hand.tap"
         case .hotkey:     return "command"
         case .about:      return "info.circle"
         }
@@ -62,6 +64,8 @@ struct SettingsNavigationContent: View {
                     .tag(SettingsSection.appearance)
                 Label("显示器", systemImage: SettingsSection.display.icon)
                     .tag(SettingsSection.display)
+                Label("手势", systemImage: SettingsSection.gesture.icon)
+                    .tag(SettingsSection.gesture)
             }
 
             Section("高级") {
@@ -81,6 +85,8 @@ struct SettingsNavigationContent: View {
             AppearancePane(prefs: prefs)
         case .display:
             DisplayPane(prefs: prefs)
+        case .gesture:
+            GesturePane(prefs: prefs)
         case .hotkey:
             HotkeyPane(prefs: prefs)
         case .about:

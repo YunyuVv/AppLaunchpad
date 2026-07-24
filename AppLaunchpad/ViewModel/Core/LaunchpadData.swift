@@ -1,6 +1,16 @@
 import AppKit
 import Observation
 
+/// 触控板翻页松手时的一次性翻页意图。
+/// - `offset`：松手瞬间的跟手偏移（与鼠标拖拽 `dragOffsetX` 同语义：负值 = 看下一页）。
+/// - `target`：目标页索引。
+/// 用 struct（而非元组）包装，规避元组在某些 Swift 版本下不自动遵循 `Equatable`、
+/// 导致 `onChange(of:)` 无法编译的问题。
+struct TrackpadPageFlip: Equatable {
+    let offset: CGFloat
+    let target: Int
+}
+
 /// 共享状态容器：所有 UI 可变状态的单一数据源（Single Source of Truth）。
 /// 只持有状态 + 极简无副作用动作（翻页、清除选中、几何落点读取），
 /// 不包含业务编排逻辑；具体行为由各 Controller 通过对 `data` 的读写完成。
@@ -41,6 +51,21 @@ final class LaunchpadData {
 
     // 翻页方向（供视图层 transition 使用）
     private(set) var pageFlipGoingForward: Bool = true
+
+    // MARK: - 触控板跟手翻页状态
+
+    /// 触控板双指横扫的实时跟手偏移，由 `LaunchpadWindowController.scrollMonitor`
+    /// 在 `.changed` 阶段写入。语义与鼠标拖拽的 `dragOffsetX` 完全一致：负值 = 看下一页。
+    /// 值为 0 表示未跟手；`LaunchpadView` 据此实时平移「当前页 + 相邻页」，归 0 即切回单页
+    /// （弹簧回弹在视图层完成，由 `!= 0` 自动退出跟手渲染分支）。
+    var trackpadPagingOffsetX: CGFloat = 0
+
+    /// 触控板翻页松手时的一次性意图：`WindowController` 在 `.ended` 按阈值判定翻页后写入
+    /// `(跟手偏移, 目标页)`，`LaunchpadView` 的 `onChange` 消费——同步设 `pendingFlipStart`
+    /// + `pageTransitionOffset` 后 `goToPage`，复用鼠标拖拽「连续滑入」逻辑，避免
+    /// `onChange(currentPageIndex)` 异步回调前用旧偏移(0)渲染新页一帧 → 闪现正中。
+    /// 由视图层消费后置 nil。
+    var trackpadPagingCommit: TrackpadPageFlip? = nil
 
     // MARK: - 极简动作（仅读写本容器状态，无外部依赖）
 
