@@ -41,6 +41,7 @@
 		D0C22C48074A5C59A81D34D0 /* LayoutService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2EBF79D74C9F7A409BC1454C /* LayoutService.swift */; };
 		DB69572BB5AE84B7263B8422 /* FolderController.swift in Sources */ = {isa = PBXBuildFile; fileRef = EEC15481E17707A96309B85C /* FolderController.swift */; };
 		E46A0A5C160467A0C14E5B04 /* AppLaunchpadApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0915EDF9A5283181DB0CF3DB /* AppLaunchpadApp.swift */; };
+		E869925B85DD495CF4DDBDCD /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 12CF66B86E2B143660FAB8CD /* Assets.xcassets */; };
 		E8D81CF1D881ED943F621ACB /* Array+Chunked.swift in Sources */ = {isa = PBXBuildFile; fileRef = E5571F58397D39EAD78E758A /* Array+Chunked.swift */; };
 		F0DB7C5FD6EB256E784541EC /* FolderExpandedView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C146C0F827A8BA6F36C2D475 /* FolderExpandedView.swift */; };
 /* End PBXBuildFile section */
@@ -50,6 +51,7 @@
 		0348AEAAF07433837BCFCF59 /* LaunchpadWindowController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LaunchpadWindowController.swift; sourceTree = "<group>"; };
 		0915EDF9A5283181DB0CF3DB /* AppLaunchpadApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppLaunchpadApp.swift; sourceTree = "<group>"; };
 		0E7B942F0AE743967FAA542A /* GridPageView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GridPageView.swift; sourceTree = "<group>"; };
+		12CF66B86E2B143660FAB8CD /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		1C8F6EC646880B2A114FF0F9 /* NavigationController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NavigationController.swift; sourceTree = "<group>"; };
 		20008FEB2ECB7E9946A99CBD /* AppScanner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppScanner.swift; sourceTree = "<group>"; };
 		2481B06DA5521D3CE3F58222 /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppDelegate.swift; sourceTree = "<group>"; };
@@ -215,6 +217,7 @@
 				FADCBCE41079482ED837600B /* Views */,
 				CA2E636C133A8C624F0B17B9 /* Window */,
 				59C1E1B7C3ACC4BA22DFCBB0 /* AppLaunchpad.entitlements */,
+				12CF66B86E2B143660FAB8CD /* Assets.xcassets */,
 				4E5468B5E7544D5B8745AA7D /* Info.plist */,
 			);
 			path = AppLaunchpad;
@@ -245,6 +248,7 @@
 			buildConfigurationList = 2B89683ECF6D27C683AEE194 /* Build configuration list for PBXNativeTarget "AppLaunchpad" */;
 			buildPhases = (
 				86CFD841D420B11E06F76DCE /* Sources */,
+				F928FA67C1C437933948D440 /* Resources */,
 			);
 			buildRules = (
 			);
@@ -290,6 +294,17 @@
 			);
 		};
 /* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		F928FA67C1C437933948D440 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				E869925B85DD495CF4DDBDCD /* Assets.xcassets in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
 		86CFD841D420B11E06F76DCE /* Sources */ = {

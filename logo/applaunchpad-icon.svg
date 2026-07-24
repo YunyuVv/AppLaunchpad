@@ -1,0 +1,54 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" role="img" aria-label="AppLaunchpad logo: upward chevron above a grid of six rounded squares, on an indigo-to-violet rounded-square background">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="1" x2="0" y2="0">
+      <stop offset="0" stop-color="#4F46E5"/>
+      <stop offset="1" stop-color="#7C3AED"/>
+    </linearGradient>
+    <linearGradient id="topGloss" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#FFFFFF" stop-opacity="0.18"/>
+      <stop offset="0.55" stop-color="#FFFFFF" stop-opacity="0"/>
+    </linearGradient>
+    <clipPath id="squircle">
+      <rect x="32" y="32" width="960" height="960" rx="224" ry="224"/>
+    </clipPath>
+    <filter id="iconShadow" x="-10%" y="-10%" width="120%" height="120%">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="14"/>
+      <feOffset dx="0" dy="10"/>
+      <feComponentTransfer><feFuncA type="linear" slope="0.35"/></feComponentTransfer>
+      <feMerge><feMergeNode/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="symShadow" x="-10%" y="-10%" width="120%" height="120%">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="6"/>
+      <feOffset dx="0" dy="6"/>
+      <feComponentTransfer><feFuncA type="linear" slope="0.45"/></feComponentTransfer>
+      <feMerge><feMergeNode/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+  </defs>
+
+  <!-- Squircle background with subtle outer shadow -->
+  <g filter="url(#iconShadow)">
+    <rect x="32" y="32" width="960" height="960" rx="224" ry="224" fill="url(#bg)"/>
+  </g>
+
+  <!-- Top gloss + inner shading, clipped to squircle -->
+  <g clip-path="url(#squircle)">
+    <rect x="32" y="32" width="960" height="220" fill="url(#topGloss)"/>
+    <rect x="32" y="800" width="960" height="192" fill="#000000" fill-opacity="0.08"/>
+  </g>
+
+  <!-- Symbol: upward chevron above a 3x2 grid of rounded squares -->
+  <g filter="url(#symShadow)" fill="#FFFFFF" stroke="none">
+    <polyline points="300,540 512,300 724,540"
+              fill="none" stroke="#FFFFFF" stroke-width="72"
+              stroke-linecap="round" stroke-linejoin="round"/>
+
+    <!-- 3 columns x 2 rows, centers x: 352, 512, 672 ; y: 672, 832 ; size 110x110, rx 28 -->
+    <rect x="297" y="617" width="110" height="110" rx="28" ry="28"/>
+    <rect x="457" y="617" width="110" height="110" rx="28" ry="28"/>
+    <rect x="617" y="617" width="110" height="110" rx="28" ry="28"/>
+    <rect x="297" y="777" width="110" height="110" rx="28" ry="28"/>
+    <rect x="457" y="777" width="110" height="110" rx="28" ry="28"/>
+    <rect x="617" y="777" width="110" height="110" rx="28" ry="28"/>
+  </g>
+</svg>

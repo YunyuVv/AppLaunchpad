@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" role="img" aria-label="AppLaunchpad symbol: upward chevron above a grid of six rounded squares">
+  <!-- Symbol only — transparent background. Use over any solid color. -->
+  <g fill="#FFFFFF">
+    <polyline points="300,540 512,300 724,540"
+              fill="none" stroke="#FFFFFF" stroke-width="72"
+              stroke-linecap="round" stroke-linejoin="round"/>
+    <rect x="297" y="617" width="110" height="110" rx="28" ry="28"/>
+    <rect x="457" y="617" width="110" height="110" rx="28" ry="28"/>
+    <rect x="617" y="617" width="110" height="110" rx="28" ry="28"/>
+    <rect x="297" y="777" width="110" height="110" rx="28" ry="28"/>
+    <rect x="457" y="777" width="110" height="110" rx="28" ry="28"/>
+    <rect x="617" y="777" width="110" height="110" rx="28" ry="28"/>
+  </g>
+</svg>
