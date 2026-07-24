@@ -98,10 +98,24 @@ final class LaunchpadWindowController {
         guard localEventMonitor == nil else { return }
         localEventMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
             guard let self else { return event }
-            // 若启动台内已有 SwiftUI TextField（如文件夹重命名）获得焦点，
-            // 所有按键交还给该输入框处理（否则会被下方逻辑吞掉去触发搜索）。
-            if self.isTextInputFirstResponder() {
-                return event
+            // ── 搜索框焦点处理 ──
+            // 设计目标：拼音 IME 输入不分裂 + 翻页/导航不被吞。
+            // - 搜索框已聚焦 且 有内容：所有按键（光标移动/删除/IME 合成）交还输入框。
+            // - 搜索框已聚焦 但 为空：可打印字符（含拼音首字母）交还输入框，由其自然接收与
+            //   触发 IME；方向键 / ESC / Return 等非可打印键落入下方键盘导航逻辑（翻页、退出），
+            //   保证即使焦点残留也能正常翻页（不再被输入框吞掉）。
+            // - 搜索框未聚焦：走下方字母搜索 / 键盘导航。
+            let focused = self.isTextInputFirstResponder()
+            let isPrintable = (event.characters?.isEmpty == false)
+                && !event.modifierFlags.contains(.command)
+                && !event.modifierFlags.contains(.control)
+                && !event.modifierFlags.contains(.option)
+            if focused {
+                if viewModel.searchText.isEmpty {
+                    if isPrintable { return event }   // 让 IME 从首个字母起在输入框上下文合成
+                } else {
+                    return event                       // 有内容：全部交还输入框
+                }
             }
             let cols = viewModel.columnCount(for: primaryScreen)
             switch event.keyCode {

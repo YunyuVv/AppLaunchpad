@@ -8,6 +8,7 @@
 - Swift 6 成员初始化器不含带默认值的存储属性：`struct S{let a:Int;let b:Int=0}` → `S(a:1,b:2)` 编译失败。去默认值或显式写 `init`。
 - `NSEvent.Phase` 是 OptionSet：判「无惯性阶段」用 `event.momentumPhase.isEmpty`，非 `== .none`。
 - **App 显示名本地化坑**：读 app 中文名（`CFBundleDisplayName`）**绝不能**用 `Bundle.localizedString(forKey:table:"InfoPlist")` / `Bundle.localizedInfoDictionary` —— 当 app 的 `CFBundleDevelopmentRegion="en"` 且**无** `CFBundleLocalizations` 字段时（典型如腾讯 `wechatwebdevtools.app`），Foundation 的 `preferredLocalizations` 会错选 `["en"]` 而读不到 `zh_CN.lproj/InfoPlist.strings`（Spotlight/mdls 走不同路径能正确返回中文）。必须**手写**按 `Locale.preferredLanguages` + 实际 `*.lproj` 目录匹配的读取（地区码取 `parts.last` 而非 `parts[1]`，否则 `zh-Hans-CN` 会把 `Hans` 当地区→生成 `zh_Hans.lproj` 匹配失败）。详见 `AppScanner.localizedDisplayName`（2026-07-25）。
+- **键盘监听 + 搜索框焦点红线（2026-07-25）**：`LaunchpadWindowController.setupKeyMonitor` 里 `isTextInputFirstResponder()` 的「放行给输入框」判断**必须**同时要求 `!viewModel.searchText.isEmpty`——即只有「搜索框聚焦 **且** 确有搜索内容」才 `return event` 把按键交给输入框；否则（搜索框聚焦但空、或未聚焦）一律走正常键盘导航（左右箭头翻页、字母进搜索）。根因：`panel`/`NSHostingView` 复用不重建 → `@FocusState` 跨 hide/show 保留，残留焦点会让 `isTextInputFirstResponder()` 恒 true 而吞掉左右箭头。配套：搜索框 `@FocusState` 须上提到 `LaunchpadView`，每次 `isVisible→true` 强制 `searchFocused=false` 失焦（治本，连视觉残留也清）。AppLaunchpad 实际只有一个 TextField（搜索框），无需顾虑其他空输入框。
 
 ## 架构（模块化，同 target 不拆 framework）
 - 巨型 `LaunchpadViewModel` 拆为 `LaunchpadData`（@Observable 共享状态：layout/allApps/isVisible/currentPageIndex/searchText/isEditMode/dragState/gridGeometry/翻页/load-save/pendingAppsRefresh/totalPages）+ 4 个 @Observable Controller：`LayoutService`（几何+布局+扫描）、`SearchController`、`DragController`（边缘翻页 Timer .common，`stopEdgeScrollTimer()` 供 exitEditMode）、`NavigationController`。根 VM 组合根+薄壳转发，View 零改动。
@@ -40,6 +41,11 @@
 ## 设置窗口
 - `Window("设置",id:"settings")`+`NavigationSplitView`+`.listStyle(.sidebar)`；入口经 `AppDelegate.openSettings()`→`settingsOpener`→`openWindow(id:)`（**绝不用 `showWindow:`**，Dock 菜单下失效）。打开降面板层级、关闭恢复。
 - 外观参数全进 `UserPreferences`（存储属性+didSet 写 UserDefaults，勿写计算属性否则 @Observable 失效）；`0=自动`。透明度默认 0.10。
+
+## 搜索框焦点 / 拼音 IME（2026-07-25 红线）
+- **搜索框必须在 `show()` 时聚焦**（与原生 Launchpad 一致）：`LaunchpadView` `onChange(of: isVisible)` 里 `searchFocused = false; DispatchQueue.main.async { searchFocused = true }`（先 false 再 async true，确保 panel/NSHostingView 复用不重建时 SwiftUI @FocusState 真正重新聚焦）。**不聚焦 → 拼音 IME 必分裂**（首字母被键盘 monitor 截走、其余拼音被 IME 写回输入框 → "h 一个、aima 一个"）。
+- **键盘 monitor 焦点门控不变量（`LaunchpadWindowController.setupKeyMonitor`）**：搜索框聚焦且**空**时，可打印字符（含拼音首字母）**必须 `return event` 交还输入框**，绝不可自行 `searchText += chars`（否则首字母被 monitor 截走、其余被 IME 写回 → 分裂）；聚焦且有内容时全部 `return event`（光标/删除/IME 交给输入框）；**未聚焦**才走字母搜索追加逻辑。方向键/ESC/Return 在非可打印分支仍落入下方导航逻辑 → 翻页/退出不被吞（上一轮「箭头被吞」bug 仍有保障）。
+- **切勿**为修别的 bug 把 `show()` 聚焦改回 `searchFocused = false`（上轮回归即此引起）。要同时保 IME 不分裂 + 翻页不被吞，只能靠上面两条组合，不能靠「失焦」。
 
 ## 数据/其他
 - 布局：`LayoutStore`(actor)+JSON 原子写 `~/Library/Application Support/AppLaunchpad/layout.json`（全量快照 `LayoutData`：分页 `[[LayoutItem]]`+`folders`，**folders 字段运行时永远为空**，仅作兼容字段保留）。偏好：`UserPreferences`→UserDefaults。App 信息不持久化。

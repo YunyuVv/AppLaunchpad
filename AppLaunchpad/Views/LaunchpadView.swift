@@ -9,6 +9,9 @@ struct LaunchpadView: View {
     @State private var appeared = false
     @State private var dragOffsetX: CGFloat = 0
     @State private var isDragging = false
+    /// 搜索框焦点（上提自 SearchBarView）：每次呼出启动台（isVisible 变 true）时强制
+    /// 失焦，避免 panel/NSHostingView 复用导致 SwiftUI @FocusState 不释放、焦点残留。
+    @FocusState private var searchFocused: Bool
     @State private var expandedFolderID: UUID? = nil
     /// 翻页过渡动画：方向性滑入 + 淡入（无需双页渲染）
     @State private var pageTransitionOffset: CGFloat = 0
@@ -121,7 +124,20 @@ struct LaunchpadView: View {
 
                 // 内容层：搜索栏置顶，网格占满剩余空间，分页指示器在底部
                 VStack(spacing: 0) {
-                    SearchBarView(text: $viewModel.searchText).padding(.top, effectiveTopPadding())
+                    SearchBarView(text: $viewModel.searchText, focus: $searchFocused)
+                        .padding(.top, effectiveTopPadding())
+                        // 每次呼出启动台（isVisible: false→true）强制搜索框获得焦点：
+                        // 让拼音 IME 从首个字母起就在 TextField 的 firstResponder 上下文里合成，
+                        // 否则首字母会被键盘 monitor 截走、其余拼音被 IME 写回输入框，造成
+                        // 「h 进 monitor、aima 进输入框」的分裂（见 LaunchpadWindowController）。
+                        // 先 false 再 async true，确保 panel/NSHostingView 复用（不重建）时
+                        // SwiftUI @FocusState 仍能真正重新聚焦。
+                        .onChange(of: viewModel.isVisible) { _, visible in
+                            if visible {
+                                searchFocused = false
+                                DispatchQueue.main.async { searchFocused = true }
+                            }
+                        }
                     contentArea(iconSize: iconSize, cols: cols, rows: rows)
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                     pageIndicatorArea

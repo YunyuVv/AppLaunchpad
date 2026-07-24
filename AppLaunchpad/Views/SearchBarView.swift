@@ -3,7 +3,10 @@ import SwiftUI
 /// 顶部搜索框，半透明磨砂玻璃材质
 struct SearchBarView: View {
     @Binding var text: String
-    @FocusState private var isFocused: Bool
+    /// 由父视图（LaunchpadView）持有的 @FocusState 注入，便于每次呼出启动台时
+    /// 统一强制失焦，避免 panel 复用导致 SwiftUI @FocusState 不释放、搜索框焦点残留
+    /// （残留焦点会让键盘 monitor 把左右箭头等按键全吞掉，无法翻页）。
+    var focus: FocusState<Bool>.Binding
 
     var body: some View {
         HStack(spacing: 8) {
@@ -15,7 +18,7 @@ struct SearchBarView: View {
                 .textFieldStyle(.plain)
                 .font(.system(size: 16))
                 .foregroundStyle(.white)
-                .focused($isFocused)
+                .focused(focus)
                 // 清空按钮
             if !text.isEmpty {
                 Button {
