@@ -18,6 +18,31 @@ struct FolderThumbnailView: View {
 
     @State private var folderIconImages: [String: NSImage] = [:]
 
+    // 自定义 init：同步预填缓存命中的文件夹图标，避免每次进屏（含翻页时相邻页挂载）
+    // 先闪 ProgressView 再异步加载的闪烁。与 AppIconView 的 IconCache.cachedIcon 同步兜底同思路。
+    init(folder: FolderInfo, apps: [AppInfo], iconSize: CGFloat, isEditMode: Bool, isSelected: Bool,
+         onTap: @escaping () -> Void, onLongPress: @escaping () -> Void, onDelete: (() -> Void)?,
+         showName: Bool = true, showDeleteButton: Bool = true) {
+        self.folder = folder
+        self.apps = apps
+        self.iconSize = iconSize
+        self.isEditMode = isEditMode
+        self.isSelected = isSelected
+        self.onTap = onTap
+        self.onLongPress = onLongPress
+        self.onDelete = onDelete
+        self.showName = showName
+        self.showDeleteButton = showDeleteButton
+        var initial: [String: NSImage] = [:]
+        for id in folder.appIDs.prefix(9) {
+            if let app = apps.first(where: { $0.bundleID == id }),
+               let img = IconCache.cachedIcon(for: app) {
+                initial[id] = img
+            }
+        }
+        _folderIconImages = State(initialValue: initial)
+    }
+
     var body: some View {
         VStack(spacing: 2) {
             // 3×3 图标网格
@@ -115,7 +140,14 @@ struct FolderThumbnailView: View {
         for id in ids {
             guard folderIconImages[id] == nil,
                   let app = apps.first(where: { $0.bundleID == id }) else { continue }
-            let icon = await IconCache.shared.icon(for: app)
+            // 同步兜底：优先取缓存（未命中会同步取系统图标并回填），避免异步加载期间闪 ProgressView；
+            // 极罕见缓存仍为空时再异步取一次。
+            let icon: NSImage
+            if let cached = IconCache.cachedIcon(for: app) {
+                icon = cached
+            } else {
+                icon = await IconCache.shared.icon(for: app)
+            }
             folderIconImages[id] = icon
         }
     }
