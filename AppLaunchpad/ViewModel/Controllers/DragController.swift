@@ -38,6 +38,20 @@ final class DragController {
         // 落点由 GridGeometry 纯几何推导，无需拍坐标快照。
     }
 
+    /// 文件夹拖拽起点：设置 draggedItemType = .folder，其余与 app 拖拽一致。
+    func beginDrag(folderID: UUID, pageIndex: Int, location: CGPoint) {
+        guard let slot = data.layout.pages[pageIndex].firstIndex(of: .folder(id: folderID)) else { return }
+        data.dragState = DragState(
+            isDragging: true,
+            sourcePageIndex: pageIndex,
+            sourceSlotIndex: slot,
+            cursorSlot: slot,
+            dragLocation: location,
+            draggedItemType: .folder,
+            draggedFolderID: folderID
+        )
+    }
+
     /// 拖拽中更新目标：①几何落点（cursorSlot → make-way）
     /// ②悬停目标检测（hoverTargetBundleID/FolderID）
     func updateDragTarget(location: CGPoint) {
@@ -53,8 +67,12 @@ final class DragController {
         let slot = geo.slotUnderCursor(location)
         data.dragState.cursorSlot = slot
 
-        // ② 悬停检测（用原始布局，与 make-way 完全独立，互不干扰）
-        detectHoverTarget(location: location, geo: geo)
+        // ② 悬停检测——仅 app 拖拽时触发（文件夹拖拽不做合并/嵌套）
+        if data.dragState.draggedItemType == .app {
+            detectHoverTarget(location: location, geo: geo)
+        } else {
+            clearHover()
+        }
     }
 
     // MARK: - 悬停检测（文件夹创建 / 添加）
@@ -294,10 +312,13 @@ final class DragController {
             items.insert(item, at: min(max(to, 0), items.count))
             return items
         } else if data.currentPageIndex == pageIndex {
-            // 翻页后的目标页：占位插入 cursorSlot 让本页 app 推开
+            // 翻页后的目标页：根据拖拽项类型插入对应占位（app 或 folder）
             let to = data.dragState.cursorSlot
             var items = data.layout.pages[pageIndex]
-            items.insert(.app(bundleID: data.dragState.draggedBundleID),
+            let placeholder: LayoutItem = data.dragState.draggedItemType == .folder
+                ? .folder(id: data.dragState.draggedFolderID ?? UUID())
+                : .app(bundleID: data.dragState.draggedBundleID)
+            items.insert(placeholder,
                          at: min(max(to, 0), items.count))
             return items
         } else {

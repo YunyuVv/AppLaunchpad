@@ -89,6 +89,9 @@ final class LaunchpadViewModel {
     func beginDrag(bundleID: String, pageIndex: Int, location: CGPoint) {
         drag.beginDrag(bundleID: bundleID, pageIndex: pageIndex, location: location)
     }
+    func beginDrag(folderID: UUID, pageIndex: Int, location: CGPoint) {
+        drag.beginDrag(folderID: folderID, pageIndex: pageIndex, location: location)
+    }
     func updateDragTarget(location: CGPoint) { drag.updateDragTarget(location: location) }
     func endDrag() { drag.endDrag() }
     func pageItemsWithDrag(pageIndex: Int) -> [LayoutItem] { drag.pageItemsWithDrag(pageIndex: pageIndex) }
@@ -97,6 +100,8 @@ final class LaunchpadViewModel {
     func slotUnderCursor(_ point: CGPoint, pageIndex: Int) -> Int? { data.slotUnderCursor(point, pageIndex: pageIndex) }
     func iconFootprintItemAt(_ point: CGPoint) -> (slot: Int, item: LayoutItem)? { data.iconFootprintItemAt(point) }
     func appAtIconPoint(_ point: CGPoint) -> String? { data.appAtIconPoint(point) }
+    func folderAtIconPoint(_ point: CGPoint) -> UUID? { data.folderAtIconPoint(point) }
+    func anyItemAtIconPoint(_ point: CGPoint) -> Bool { data.anyItemAtIconPoint(point) }
 
     // MARK: - 文件夹（→ FolderController）
 

@@ -15,7 +15,7 @@ struct LaunchpadView: View {
     /// 被反复重建，闭包局部变量随之被重置 → 松手时 onEnded 跑在"新实例"上、startBundleID 为 nil
     /// → guard 失败、endDrag 不执行 → app 不落位 + isDragging 卡死（"松手后无法点击"）。
     /// @GestureState 是视图级状态，跨手势重建保留，且专为拖拽设计、写它不会中断手势。
-    @GestureState private var dragStart: (checked: Bool, bundleID: String?) = (false, nil)
+    @GestureState private var dragStart: (checked: Bool, bundleID: String?, folderID: UUID?) = (false, nil, nil)
     // 直接观察同一个 UserPreferences 单例：行列数/间距/边距均在此读取，
     // 设置面板拖动滑块时会立即触发本视图重新布局（实时生效）。
     @Bindable private var prefs = UserPreferences.shared
@@ -196,26 +196,31 @@ struct LaunchpadView: View {
 
                 if !state.checked {
                     state.checked = true
-                    // 仅当起点压在 app 图标上（footprint 内）才启动拖拽；
-                    // 落在 cell 间隙 / 空白 / 文件夹上都不启动，让翻页手势或点击正常处理。
+                    // 起点压在 app 图标上 → 启动 app 拖拽
                     if let bundleID = viewModel.appAtIconPoint(value.startLocation) {
                         state.bundleID = bundleID
                         if !viewModel.isEditMode { viewModel.enterEditMode() }
                         viewModel.beginDrag(bundleID: bundleID, pageIndex: viewModel.currentPageIndex, location: value.startLocation)
                     }
+                    // 起点压在文件夹图标上 → 启动文件夹拖拽（仅重排，不合并/嵌套）
+                    else if let folderID = viewModel.folderAtIconPoint(value.startLocation) {
+                        state.folderID = folderID
+                        if !viewModel.isEditMode { viewModel.enterEditMode() }
+                        viewModel.beginDrag(folderID: folderID, pageIndex: viewModel.currentPageIndex, location: value.startLocation)
+                    }
                 }
 
-                // 起点不是 app（空白/文件夹）：不启动图标拖拽，让 pagingDragGesture 处理翻页。
-                guard state.bundleID != nil else { return }
+                // 起点不是有效项（空白/间隙）：不启动图标拖拽，让 pagingDragGesture 处理翻页。
+                guard state.bundleID != nil || state.folderID != nil else { return }
 
                 // 落点纯几何推导：由光标坐标 + 固定网格几何算出 cursorSlot，
                 // 不再用 measured frame / 快照 / 最近中心点，避免让位动画导致落点漂移。
                 viewModel.updateDragTarget(location: value.location)
             }
             .onEnded { value in
-                // 松手时用 dragState.draggedBundleID 判定落主体责任（@GestureState dragStart
-                // 在 onEnded 调用前已被 SwiftUI 复位为初始值，不可读）。
-                guard viewModel.dragState.draggedBundleID != nil, viewModel.dragState.isDragging else { return }
+                // 松手落主体责任：dragState.isDragging 为 true 即说明拖拽已启动
+                //（draggedBundleID 为 String 非 optional，判 nil 永真、无意义）。
+                guard viewModel.dragState.isDragging else { return }
                 // 用松手瞬间的精确坐标再算一次落点，消除「最后一步 onChanged 与松手位置
                 // 存在一格偏差」导致的偏移（落不到正位 / 有点偏离）。
                 viewModel.updateDragTarget(location: value.location)
@@ -229,11 +234,11 @@ struct LaunchpadView: View {
     private var pagingDragGesture: some Gesture {
         DragGesture(minimumDistance: 30, coordinateSpace: .global)
             .onChanged { value in
-                // 起点压在 app 图标上：交给 globalDragGesture 或点击，这里让行，不翻页。
-                // 落在 cell 间隙 / 网格外（含文件夹）则正常翻页。
+                // 起点压在任何图标���（app 或文件夹）：交给 globalDragGesture 或点击，这里让行，不翻页。
+                // 落在 cell 间隙 / 网格外则正常翻页。
                 guard !viewModel.isSearching, !viewModel.isEditMode,
                       !viewModel.dragState.isDragging,
-                      viewModel.appAtIconPoint(value.startLocation) == nil else {
+                      !viewModel.anyItemAtIconPoint(value.startLocation) else {
                     dragOffsetX = 0
                     return
                 }
@@ -244,7 +249,7 @@ struct LaunchpadView: View {
             .onEnded { value in
                 guard !viewModel.isSearching, !viewModel.isEditMode,
                       !viewModel.dragState.isDragging,
-                      viewModel.appAtIconPoint(value.startLocation) == nil else {
+                      !viewModel.anyItemAtIconPoint(value.startLocation) else {
                     dragOffsetX = 0
                     return
                 }
@@ -375,22 +380,43 @@ struct LaunchpadView: View {
     @ViewBuilder
     private func floatingDragIcon(iconSize: CGFloat) -> some View {
         let ds = viewModel.dragState
-        if ds.isDragging,
-           let app = viewModel.allApps.first(where: { $0.bundleID == ds.draggedBundleID }) {
-            AppIconView(
-                app: app,
-                iconSize: iconSize,
-                isEditMode: false,
-                onTap: {},
-                onLongPress: {},
-                onDelete: nil
-            )
-            .scaleEffect(1.12)
-            .shadow(color: .black.opacity(0.35), radius: 12, x: 0, y: 6)
-            .allowsHitTesting(false)
-            .position(ds.dragLocation)
-            .zIndex(999)
-            .transition(.opacity)
+        if ds.isDragging {
+            // 文件夹拖拽：显示 FolderThumbnailView 作为浮动图标
+            if ds.draggedItemType == .folder,
+               let folderID = ds.draggedFolderID,
+               let folder = viewModel.folderInfo(for: folderID) {
+                FolderThumbnailView(
+                    folder: folder,
+                    apps: viewModel.allApps,
+                    iconSize: iconSize,
+                    isEditMode: false,
+                    isSelected: false,
+                    onTap: {}, onLongPress: {}, onDelete: nil
+                )
+                .scaleEffect(1.12)
+                .shadow(color: .black.opacity(0.35), radius: 12, x: 0, y: 6)
+                .allowsHitTesting(false)
+                .position(ds.dragLocation)
+                .zIndex(999)
+                .transition(.opacity)
+            }
+            // App 拖拽：显示 AppIconView 作为浮动图标
+            else if let app = viewModel.allApps.first(where: { $0.bundleID == ds.draggedBundleID }) {
+                AppIconView(
+                    app: app,
+                    iconSize: iconSize,
+                    isEditMode: false,
+                    onTap: {},
+                    onLongPress: {},
+                    onDelete: nil
+                )
+                .scaleEffect(1.12)
+                .shadow(color: .black.opacity(0.35), radius: 12, x: 0, y: 6)
+                .allowsHitTesting(false)
+                .position(ds.dragLocation)
+                .zIndex(999)
+                .transition(.opacity)
+            }
         }
     }
 }

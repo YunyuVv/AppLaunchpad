@@ -103,4 +103,18 @@ final class LaunchpadData {
         if case .app(let bundleID) = item { return bundleID }
         return nil
     }
+
+    /// 起手判定：光标是否压在文件夹图标上（footprint 内且为 folder）。
+    /// 返回文件夹 UUID；否则返回 nil。
+    func folderAtIconPoint(_ point: CGPoint) -> UUID? {
+        guard let (_, item) = iconFootprintItemAt(point) else { return nil }
+        if case .folder(let id) = item { return id }
+        return nil
+    }
+
+    /// 起手判定：光标是否压在任何一个图标 footprint 上（app 或文件夹）。
+    /// 用于翻页手势的放行判断。
+    func anyItemAtIconPoint(_ point: CGPoint) -> Bool {
+        iconFootprintItemAt(point) != nil
+    }
 }
