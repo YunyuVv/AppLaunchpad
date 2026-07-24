@@ -289,26 +289,61 @@ Window("设置", id: "settings")
 | 设置面板 | ✅ 完成 | 外观、显示器、快捷键、关于 |
 | 触控板/滚轮翻页 | ✅ 完成 | phase 累积防误触 |
 | FSEvents 自动刷新 | ✅ 完成 | 2s debounce + 拖拽中挂起 |
-| 文件夹功能 | ❌ 已移除 | 数据骨架保留（`LayoutItem.folder`、`FolderInfo`），UI/手势已删 |
+| 文件夹功能 | ✅ 完成 | 创建/合并/缩略图/内部拖拽重排/拖出到主网格（详见 `文件夹管理功能.md`） |
 | 触摸板拖拽排序 | ❌ 未实现 | 当前仅支持鼠标拖拽 |
 
 ---
 
-## 10. 文件夹功能（已移除—扩展点）
+## 10. 文件夹功能
 
-**保留的惰性骨架**：
-- `LayoutItem.folder` 枚举项
-- `LayoutData.folders: [String: FolderInfo]` 字典
-- `FolderInfo` 类型
+### 10.1 功能概览
 
-**运行时行为**：`LayoutService.mergeLayout` 展开遗留 `.folder` 为内部 app → `folders` 置空 → 永远不出现文件夹。
+文件夹功能已完整实现（2026-07-24）。详见专用文档：
+- `docs/开发知识库/文件夹管理功能.md` — 所有功能的详细说明
+- `docs/开发知识库/文件夹创建功能的实现.md` — 创建文件夹的技术细节与坑
 
-**未来恢复步骤**：
-1. 重建 3 个文件：`FolderController.swift` / `FolderThumbnailView.swift` / `FolderExpandedView.swift`
-2. `DragController` 加回 `folders` 依赖
-3. `mergeLayout` 改回保留 `folders`
-4. `endDrag` 加回 `folderHoverID` 归入分支
-5. 数据格式 + 持久化层无需改动
+| 功能 | 说明 |
+|------|------|
+| 创建文件夹 | 拖 app A 到 app B 图标上（hover 放大 1.15×）→ 松手创建 |
+| 添加到已有文件夹 | 拖 app 到已有文件夹图标上 → 松手添加 |
+| 缩略图 | 3×3 网格，外边距 6pt，异步加载图标 |
+| 删除文件夹 | 编辑模式下点 ×，或拖出最后一个 app 后自动删除 |
+| 内容面板内部拖拽 | 弹簧 make-way 重排，复用 AppIconView |
+| 拖出面板 → 主网格交接 | **不松手**拖出面板 → 面板关闭 → app 保持拖拽进入主网格 |
+| 持久化 | `LayoutData.folders` → `layout.json` |
+
+### 10.2 核心代码文件
+
+| 文件 | 职责 |
+|------|------|
+| `Models/FolderInfo.swift` | 文件夹数据模型 |
+| `Models/DragState.swift` | hoverTargetBundleID/FolderID/hoverTargetSlot |
+| `ViewModel/Controllers/FolderController.swift` | 文件夹 CRUD + `removeAppAndReinsert` |
+| `ViewModel/Controllers/DragController.swift` | 悬停检测 + endDrag 文件夹分支 |
+| `Views/FolderThumbnailView.swift` | 3×3 文件夹缩略图 |
+| `Views/FolderExpandedView.swift` | 70% 展开面板 + 内拖 + 拖出交接 |
+
+### 10.3 数据流向
+
+```
+主网格拖拽中光标到 app 图标上方
+    ↓ DragController.detectHoverTarget
+hoverTargetBundleID 写入 DragState
+    ↓ pageItemsWithDrag 检测 hoverTargetSlot → hover 模式（仅 remove，不 insert）
+目标 app scaleEffect(1.15) 放大 + 被拖 app 浮动悬停
+    ↓ 松手 → endDrag 分支 1
+FolderController.createFolder → LayoutData.folders 写入
+    ↓ saveLayout → layout.json
+```
+
+### 10.4 拖出面板交接（关键特性）
+
+文件夹内容面板内拖出 app → 不松手进入主网格拖拽。详见 `文件夹管理功能.md` 第九节。核心要点：
+
+- **三个回调**：`onDragOutHandoff` / `onDragOutMove` / `onDragOutEnd`
+- **面板隐藏不销毁**：仅 `opacity 0`，保留手势宿主在层级中
+- **值类型快照陷阱**：`@State CGRect` 被手势闭包快照捕获 → 用 `class FrameBox` 包裹
+- **removeAppAndReinsert**：把 app 从文件夹 `appIDs` 移回 `pages[page]`，`beginDrag` 才能找到
 
 ---
 
@@ -429,6 +464,57 @@ windowController.showWindow(nil)
 NSApp.sendAction(Selector(("openSettings")), to: nil, from: nil)
 ```
 
+### 12.7 手势闭包捕获 @State 值类型 ≈ 快照（2026-07-24 刚踩）
+
+**现象**：手势闭包里读到 `@State var panelFrame: CGRect`，永远是初始值 `.zero`，即使已在 `onPreferenceChange` / `onAppear` 中更新过。
+
+**根因**：`@State` 对值类型（CGRect, Int, Bool 等）的行为：
+
+```
+视图首次渲染 → SwiftUI 执行 body() → 此时 panelFrame = .zero
+    ↓
+dragGesture 闭包被创建 → 闭包捕获 self → self.panelFrame = .zero
+    ↓ 后续
+onAppear / onPreferenceChange 更新 @State → SwiftUI 重新执行 body()
+    ↓
+但手势已激活 → SwiftUI 保留原闭包实例 → 闭包内 panelFrame 仍是 .zero
+```
+
+**关键**：SwiftUI **不会**重建已激活的手势闭包。所以闭包看到的是**创建时刻**的值类型快照，不是最新值。
+
+**解决**：用**引用类型（class）包裹**。
+
+```swift
+// ❌ 手势闭包捕获的是 .zero 快照
+@State private var panelFrame: CGRect = .zero
+
+// ✅ 手势闭包捕获的是指针 → 每次读取最新值
+private final class FrameBox { var frame: CGRect = .zero }
+@State private var panelFrameBox = FrameBox()
+```
+
+`@State` 存放的是 class 实例的引用。修改 `panelFrameBox.frame` 不改变引用 → 锁死 body 不重渲染，但手势闭包每次 `onChanged` 通过指针读到**最新 frame**。
+
+**泛化适用**：任何需要在手势闭包里读取"晚于手势创建才确定"的值的场景——坐标、尺寸、标志位——都不应该用值类型 `@State`，改用 class 包装。
+
+### 12.8 `allowsHitTesting(false)` 杀死手势（2026-07-24 踩）
+
+**现象**：视图设了 `.allowsHitTesting(false)` 后，已有的高优先级拖拽手势**立即终止**，`onEnded` 提前触发。
+
+**根因**：`allowsHitTesting(false)` 不只是"点不中"，它会**断开整个响应链**。正在运行的手势一旦其宿主失去命中测试，手势即认为"触摸已取消"→ `onEnded` 立即开火（`DragGesture.Value` 为空）。
+
+**解决**：仅用 `.opacity(0)` 隐藏视图，保留命中测试。opacity 不影响手势识别，视图仍在层级中、仍有命中、手势继续。
+
+```swift
+// ❌ 面板关闭 → 正在运行的手势被杀
+.opacity(isDraggingOut ? 0 : 1)
+.allowsHitTesting(!isDraggingOut)
+
+// ✅ 面板关闭（透明），手势继续
+.opacity(isDraggingOut ? 0 : 1)
+// 不加 allowsHitTesting
+```
+
 ---
 
 ## 13. 关键代码索引
@@ -448,6 +534,9 @@ NSApp.sendAction(Selector(("openSettings")), to: nil, from: nil)
 | 修改设置项 | `UserPreferences.swift` | 对应存储属性 + `AppearancePane.swift` |
 | 添加新 Controller | `LaunchpadViewModel.swift` | `init()` 注入 + 薄壳转发 |
 | 修改边缘翻页 | `DragController.swift` | `detectEdgeScroll`, `flipPageWhileDragging` |
+| 修改文件夹创建/合并 | `DragController.swift` | `detectHoverTarget`, `endDrag` 分支1/2 |
+| 修改文件夹缩略图 | `FolderThumbnailView.swift` | `body`, 3×3 网格 |
+| 修改文件夹面板拖出交接 | `Views/FolderExpandedView.swift` + `LaunchpadView.swift` | 三回调 + `FrameBox` |
 | 修改拖拽中刷新挂起 | `LayoutService.swift` | `refreshApps` 的 `pendingAppsRefresh` 分支 |
 
 ---

@@ -133,7 +133,27 @@ struct LaunchpadView: View {
                         apps: viewModel.allApps,
                         iconSize: iconSize,
                         onDismiss: { expandedFolderID = nil },
-                        onLaunch: { viewModel.launch($0) }
+                        onLaunch: { viewModel.launch($0) },
+                        onDragOutHandoff: { app, location in
+                            // 从文件夹移除并插回主网格（文件夹所在页），接管主网格拖拽
+                            let page = viewModel.folderController.removeAppAndReinsert(app.bundleID, fromFolder: folderID)
+                            viewModel.saveLayout()
+                            if !viewModel.isEditMode { viewModel.enterEditMode() }
+                            viewModel.beginDrag(bundleID: app.bundleID, pageIndex: page, location: location)
+                        },
+                        onDragOutMove: { location in
+                            viewModel.updateDragTarget(location: location)
+                        },
+                        onDragOutEnd: {
+                            viewModel.endDrag()
+                            expandedFolderID = nil
+                        },
+                        onReorder: { newIDs in
+                            var f = folder
+                            f.appIDs = newIDs
+                            viewModel.data.layout.folders[folderID] = f
+                            viewModel.saveLayout()
+                        }
                     )
                     .zIndex(1000)
                 }
