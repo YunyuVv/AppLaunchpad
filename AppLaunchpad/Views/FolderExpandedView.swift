@@ -17,8 +17,6 @@ struct FolderExpandedView: View {
     var onDragOutEnd: (() -> Void)?
     var onReorder: (([String]) -> Void)?
 
-    private let gridColumns: Int = 5
-
     // MARK: - 引用类型容器（解决 SwiftUI 手势闭包对值类型 @State 的快照捕获陷阱）
 
     /// 面板 frame 容器：用 class 而非 CGRect，确保手势闭包始终读到最新值。
@@ -73,7 +71,8 @@ struct FolderExpandedView: View {
 
     var body: some View {
         let visualApps = visualIDs.compactMap { id in apps.first { $0.bundleID == id } }
-        let columns = min(gridColumns, max(1, visualApps.count))
+        // 在 body 阶段 geometry 已知前先按 cell 宽 + 间距估一版（仅用于首帧占位，几何就绪后 appGrid 内部按真实 panelW 重算）
+        // columns 改为在 appGrid 内部基于 panelW 实时计算
         let draggedApp = dragSourceIndex.flatMap { src in
             src < orderedIDs.count ? apps.first { $0.bundleID == orderedIDs[src] } : nil
         }
@@ -84,7 +83,9 @@ struct FolderExpandedView: View {
                 .onTapGesture { onDismiss() }
 
             GeometryReader { geo in
-                let panelW = geo.size.width * 0.7
+                // 面板取屏宽 55%（之前 70% 偏胖）：narrower → 同屏宽下每行自然容纳列数变少，
+                // 完全由面板宽/格宽/间距动态决定，没有人为列数上限。
+                let panelW = geo.size.width * 0.55
                 let panelH = geo.size.height * 0.7
 
                 VStack(spacing: 0) {
@@ -94,7 +95,7 @@ struct FolderExpandedView: View {
                         .padding(.top, 28)
                         .padding(.bottom, 20)
 
-                    appGrid(columns: columns, visualApps: visualApps)
+                    appGrid(panelW: panelW, panelH: panelH, visualApps: visualApps)
                         .padding(.horizontal, 28)
                         .padding(.bottom, 28)
                 }
@@ -137,12 +138,38 @@ struct FolderExpandedView: View {
 
     // MARK: - App Grid
 
-    private func appGrid(columns: Int, visualApps: [AppInfo]) -> some View {
+    /// 每 cell 视觉宽度 = 图标 + 左右各 8pt 内边距；与 AppIconView.cellWidth 保持一致。
+    private var cellVisualWidth: CGFloat { iconSize + 16 }
+    /// 列间距 = HStack spacing（保持与原实现一致）。
+    private let hSpacing: CGFloat = 24
+    /// 内容左右内边距（与 .padding(.horizontal, 28) 对齐）。
+    private let sidePad: CGFloat = 28
+
+    /// 仿 LaunchNext：按可用宽度 + 单 cell 宽（含内边距与列间距）反推最大可容纳列数。
+    /// 不人为封顶列数（之前 `min(8, ...)` 是硬上限，违背"列数应随面板宽度自决定"的产品诉求）；
+    /// 仅保留 `min(cols, count)` 和 `max(1, ...)` 下限，避免出现空行/超量。
+    private static func computeColumns(panelW: CGFloat, cellW: CGFloat, hSpacing: CGFloat,
+                                        sidePad: CGFloat, count: Int) -> Int {
+        guard panelW > 0, cellW > 0, count > 0 else { return 1 }
+        let available = max(0, panelW - 2 * sidePad)
+        let cols = Int((available + hSpacing) / (cellW + hSpacing))
+        return max(1, min(cols, count))
+    }
+
+    private func appGrid(panelW: CGFloat, panelH: CGFloat, visualApps: [AppInfo]) -> some View {
+        let columns = Self.computeColumns(panelW: panelW, cellW: cellVisualWidth,
+                                          hSpacing: hSpacing, sidePad: sidePad,
+                                          count: visualApps.count)
         let rows = visualApps.chunked(into: columns)
+        // ScrollView 可用高度 = 面板高 - 标题区(padding.top 28 + 文字 ~18 + padding.bottom 20) - 内容底 padding 28
+        // 留作后续按面板标题字号微调；视觉对齐面板内网格上下居中。
+        let headerH: CGFloat = 28 + 18 + 20
+        let bottomPad: CGFloat = 28
+        let availableH = max(0, panelH - headerH - bottomPad)
         return ScrollView {
             VStack(spacing: 24) {
                 ForEach(0..<rows.count, id: \.self) { rowIdx in
-                    HStack(spacing: 24) {
+                    HStack(spacing: hSpacing) {
                         ForEach(rows[rowIdx]) { app in
                             let isDragged = dragSourceIndex != nil
                                 && orderedIDs.firstIndex(of: app.bundleID) == dragSourceIndex
@@ -161,18 +188,20 @@ struct FolderExpandedView: View {
                                 )
                                 .highPriorityGesture(dragGesture(for: app))
                         }
-                        if rows[rowIdx].count < columns {
-                            ForEach(0..<(columns - rows[rowIdx].count), id: \.self) { _ in
-                                Color.clear.frame(width: iconSize + 16, height: iconSize + 24)
-                            }
-                        }
-                        Spacer()
                     }
+                    // 整面板左上对齐：满行从左起铺到右侧（不强制右对齐），不满行也从最左起。
+                    // 避免之前 .center 居中导致「第 2 行 1-2 个 icon 出现在中间」的不自然视觉。
+                    .frame(maxWidth: .infinity, alignment: .leading)
                 }
             }
+            // 顶端左对齐（行数少时不再垂直居中，符合原生 Launchpad 风格）：
+            // 满行自然从左起排到右；不满行也从最左起，新加 app 继续在下一行最左出现。
+            .frame(maxWidth: .infinity, maxHeight: availableH, alignment: .topLeading)
             // 弹簧让位动画（与主网格 GridPageView 参数一致）
             .animation(.spring(response: 0.3, dampingFraction: 0.9), value: visualApps.map(\.bundleID))
         }
+        // 限制 ScrollView 高度，否则 VStack 的 maxHeight:.infinity 拿不到视口约束。
+        .frame(height: availableH)
         .scrollDisabled(dragSourceIndex != nil)
         .onPreferenceChange(CellFrameKey.self) { frames in
             cellFrames.merge(frames) { _, new in new }

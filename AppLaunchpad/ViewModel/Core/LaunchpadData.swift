@@ -72,8 +72,15 @@ final class LaunchpadData {
     // MARK: - 持久化
 
     /// 委托 LayoutStore 异步保存当前布局（原子写 layout.json）。
+    /// 保存前清理空页：某页所有 app 被拖走/移入文件夹后无需保留空白页。
     func saveLayout() {
-        let current = layout
+        var current = layout
+        current.pages = current.pages.filter { !$0.isEmpty }
+        layout = current
+        // 空页清理后 currentPageIndex 可能越界（如最后一页变空被移除）
+        if currentPageIndex >= current.pages.count {
+            currentPageIndex = max(0, current.pages.count - 1)
+        }
         Task.detached { await LayoutStore.shared.save(current) }
     }
 
