@@ -444,13 +444,15 @@ struct LaunchpadView: View {
         .clipped()
         .onChange(of: viewModel.currentPageIndex) { oldValue, newValue in
             guard oldValue != newValue else { return }
-            // 拖拽触发的翻页：新页从相邻页当时位置连续滑入（pendingFlipStart），无需淡入；
-            // 外部翻页（指示器/键盘/边缘翻页）：从 ±80 偏移 + 淡入。
-            let dragDriven = pendingFlipStart != nil
-            let start = pendingFlipStart ?? (viewModel.pageFlipGoingForward ? 80 : -80)
+            // 统一翻页观感：所有路径都用「整页宽方向性滑动、无淡入」，与鼠标拖拽同语言。
+            // - 拖拽触发：新页从相邻页当时位置连续滑入（pendingFlipStart = dragOffsetX ± 页宽）；
+            // - 外部翻页（指示器/键盘/触控板/滚轮）：新页从「整页宽」位置滑入（start = ±W）。
+            // 整页起步即在屏幕外，无需淡入遮硬边，故 opacity 始终保 1.0。
+            let W = viewModel.gridGeometry?.size.width ?? 0
+            let start = pendingFlipStart ?? (viewModel.pageFlipGoingForward ? W : -W)
             pendingFlipStart = nil
             pageTransitionOffset = start
-            pageTransitionOpacity = dragDriven ? 1.0 : 0.0
+            pageTransitionOpacity = 1.0
             withAnimation(.spring(duration: 0.4, bounce: 0.15)) {
                 pageTransitionOffset = 0
                 pageTransitionOpacity = 1.0
