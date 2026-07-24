@@ -11,9 +11,23 @@ struct AppIconView: View {
     /// 删除回调（可选）。启动台网格不传（不显示 X）；文件夹展开视图传入以移除文件夹内 app。
     let onDelete: (() -> Void)?
 
-    @State private var icon: NSImage? = nil
+    @State private var icon: NSImage?
     @State private var isHovering: Bool = false
     @State private var isPressed: Bool = false
+
+    // 自定义 init：构造时同步从缓存取图标（翻页重建时命中缓存，避免灰色占位闪烁）。
+    // 注意：@State 初值不能在属性初始值里引用 app，必须在 init 中用 _icon = State(initialValue:) 设置。
+    init(app: AppInfo, iconSize: CGFloat, isEditMode: Bool,
+         onTap: @escaping () -> Void, onLongPress: @escaping () -> Void,
+         onDelete: (() -> Void)? = nil) {
+        self.app = app
+        self.iconSize = iconSize
+        self.isEditMode = isEditMode
+        self.onTap = onTap
+        self.onLongPress = onLongPress
+        self.onDelete = onDelete
+        _icon = State(initialValue: IconCache.cachedIcon(for: app))
+    }
 
     private var cellWidth: CGFloat { iconSize + 20 }
 

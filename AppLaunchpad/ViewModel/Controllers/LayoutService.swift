@@ -94,6 +94,14 @@ final class LayoutService {
         if data.currentPageIndex >= data.totalPages {
             data.currentPageIndex = max(0, data.totalPages - 1)
         }
+
+        // 预加载所有 app 图标到缓存（后台、低优先级），
+        // 避免翻页时 GridPageView/AppIconView 重建闪灰色占位。
+        Task.detached(priority: .utility) {
+            for app in scanned {
+                _ = await IconCache.shared.icon(for: app)
+            }
+        }
     }
 
     /// 合并已存储布局与最新扫描结果：保留顺序，追加新 App，移除已卸载 App

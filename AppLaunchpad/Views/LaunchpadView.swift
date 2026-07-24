@@ -13,6 +13,9 @@ struct LaunchpadView: View {
     /// 翻页过渡动画：方向性滑入 + 淡入（无需双页渲染）
     @State private var pageTransitionOffset: CGFloat = 0
     @State private var pageTransitionOpacity: Double = 1.0
+    /// 拖拽翻页松手时的连续滑入起点；非 nil 表示本次翻页由拖拽触发
+    /// （相邻页在拖拽中已可见，故新页无需淡入，直接从相邻页位置滑入）。
+    @State private var pendingFlipStart: CGFloat? = nil
     /// 拖拽起手状态：用 @GestureState 而非手势闭包内的局部变量。
     /// 原因：globalDragGesture 是计算属性，拖拽中 @Observable 频繁触发 body 重算会让手势
     /// 被反复重建，闭包局部变量随之被重置 → 松手时 onEnded 跑在"新实例"上、startBundleID 为 nil
@@ -237,7 +240,7 @@ struct LaunchpadView: View {
     private var pagingDragGesture: some Gesture {
         DragGesture(minimumDistance: 30, coordinateSpace: .global)
             .onChanged { value in
-                // 起点压在任何图标���（app 或文件夹）：交给 globalDragGesture 或点击，这里让行，不翻页。
+                // 起点压在任何图标（app 或文件夹）：交给 globalDragGesture 或点击，这里让行，不翻页。
                 // 落在 cell 间隙 / 网格外则正常翻页。
                 guard !viewModel.isSearching, !viewModel.isEditMode,
                       !viewModel.dragState.isDragging,
@@ -258,15 +261,34 @@ struct LaunchpadView: View {
                 }
                 isDragging = false
                 let threshold: CGFloat = 50
-                let goNext = value.translation.width < -threshold
-                let goPrev = value.translation.width > threshold
-                dragOffsetX = 0
-                if goNext || goPrev {
-                    withAnimation(.spring(duration: 0.38, bounce: 0.18)) {
-                        if goNext { viewModel.goToNextPage() }
-                        else      { viewModel.goToPreviousPage() }
+                let startX = value.translation.width
+                let goingNext = startX < -threshold
+                let goingPrev = startX > threshold
+                let current = viewModel.currentPageIndex
+                let total = viewModel.totalPages
+                let target = goingNext ? min(current + 1, total - 1)
+                            : goingPrev ? max(current - 1, 0)
+                            : current
+                if target == current {
+                    // 未越过阈值：当前页从拖拽位置弹簧回到正中（无翻页）。
+                    pageTransitionOffset = startX
+                    pageTransitionOpacity = 1.0
+                    withAnimation(.spring(duration: 0.4, bounce: 0.15)) {
+                        pageTransitionOffset = 0
                     }
+                } else {
+                    // 越过阈值：新页从"相邻页当时的位置"连续滑入。
+                    // 关键：必须在 goToPage 之前同步设好过渡起点（pageTransitionOffset/opacity），
+                    // 否则 body 会在 onChange 异步回调前先用旧偏移(0)渲染新当前页一帧 → 闪现正中（闪烁）。
+                    // 同步设到 start 后，body 第一帧新页位置 = 拖拽中相邻页位置（dragOffsetX±W），完全衔接。
+                    let W = viewModel.gridGeometry?.size.width ?? 0
+                    let start = goingNext ? (startX + W) : (startX - W)
+                    pendingFlipStart = start
+                    pageTransitionOffset = start
+                    pageTransitionOpacity = 1.0
+                    viewModel.goToPage(target)
                 }
+                dragOffsetX = 0
             }
     }
 
@@ -336,18 +358,21 @@ struct LaunchpadView: View {
             let cellH = (gRect.height - vSpacing * CGFloat(rows - 1)) / CGFloat(rows)
             // 写入网格几何（@ObservationIgnored，变更不触发重渲染）。
             // 拖拽期间网格容器不移动，该几何稳定，落点完全确定。
-            viewModel.gridGeometry = GridGeometry(
-                origin: gRect.origin,
-                size: gRect.size,
-                columns: cols,
-                rows: rows,
-                cellW: cellW,
-                cellH: cellH,
-                hSpacing: hSpacing,
-                vSpacing: vSpacing,
-                iconSize: iconSize
-            )
-            return GridPageView(
+            // 注意：@ViewBuilder 内不能写裸赋值语句，用闭包调用 + let _ = 触发副作用。
+            let _ = {
+                viewModel.gridGeometry = GridGeometry(
+                    origin: gRect.origin,
+                    size: gRect.size,
+                    columns: cols,
+                    rows: rows,
+                    cellW: cellW,
+                    cellH: cellH,
+                    hSpacing: hSpacing,
+                    vSpacing: vSpacing,
+                    iconSize: iconSize
+                )
+            }()
+            let currentPage = GridPageView(
                 items: pageItems,
                 apps: viewModel.allApps,
                 columns: cols,
@@ -366,19 +391,67 @@ struct LaunchpadView: View {
                 onEndDrag: { viewModel.endDrag() },
                 onTapFolder: { expandedFolderID = $0 }
             )
-            .offset(x: dragOffsetX + pageTransitionOffset)
-            .opacity(pageTransitionOpacity)
+            if isDragging, dragOffsetX != 0 {
+                // 空白拖拽翻页进行中：当前页 + 相邻页并排，随拖拽平移，无空窗。
+                // 相邻页为纯展示（空回调 + 空 dragState），不触发 make-way，不影响落点。
+                let W = gRect.width
+                let total = viewModel.totalPages
+                let hasNext = pageIdx < total - 1
+                let hasPrev = pageIdx > 0
+                ZStack(alignment: .topLeading) {
+                    currentPage.offset(x: dragOffsetX)
+                    if hasNext, dragOffsetX < 0 {
+                        GridPageView(
+                            items: viewModel.pageItemsWithDrag(pageIndex: pageIdx + 1),
+                            apps: viewModel.allApps,
+                            columns: cols, rows: rows,
+                            hSpacing: hSpacing, vSpacing: vSpacing,
+                            iconSize: iconSize,
+                            pageIndex: pageIdx + 1,
+                            selectedSlotIndex: viewModel.selectedSlotIndex,
+                            isEditMode: false, dragState: DragState(),
+                            viewModel: viewModel,
+                            onTapApp: { _ in }, onLongPress: {},
+                            onBeginDrag: { _, _ in }, onUpdateDragTarget: { _, _ in }, onEndDrag: {},
+                            onTapFolder: { _ in }
+                        )
+                        .offset(x: dragOffsetX + W)
+                    }
+                    if hasPrev, dragOffsetX > 0 {
+                        GridPageView(
+                            items: viewModel.pageItemsWithDrag(pageIndex: pageIdx - 1),
+                            apps: viewModel.allApps,
+                            columns: cols, rows: rows,
+                            hSpacing: hSpacing, vSpacing: vSpacing,
+                            iconSize: iconSize,
+                            pageIndex: pageIdx - 1,
+                            selectedSlotIndex: viewModel.selectedSlotIndex,
+                            isEditMode: false, dragState: DragState(),
+                            viewModel: viewModel,
+                            onTapApp: { _ in }, onLongPress: {},
+                            onBeginDrag: { _, _ in }, onUpdateDragTarget: { _, _ in }, onEndDrag: {},
+                            onTapFolder: { _ in }
+                        )
+                        .offset(x: dragOffsetX - W)
+                    }
+                }
+            } else {
+                currentPage
+                    .offset(x: pageTransitionOffset)
+                    .opacity(pageTransitionOpacity)
+            }
         }
         .clipped()
         .onChange(of: viewModel.currentPageIndex) { oldValue, newValue in
             guard oldValue != newValue else { return }
-            let goingForward = newValue > oldValue
-            // 新页从翻页方向偏移 80px 处滑入 + 淡入：
-            // 瞬间设偏移 → spring 动画归零，产生方向性 slide-in 过渡。
-            // 无需双页渲染，不破坏拖拽手势（手势挂根层级，本层仅内容过渡）。
-            pageTransitionOffset = goingForward ? 80 : -80
-            pageTransitionOpacity = 0
-            withAnimation(.spring(duration: 0.35, bounce: 0.2)) {
+            // 拖拽触发的翻页：新页从相邻页当时位置连续滑入（pendingFlipStart），无需淡入；
+            // 外部翻页（指示器/键盘/边缘翻页）：从 ±80 偏移 + 淡入。
+            let dragDriven = pendingFlipStart != nil
+            let start = pendingFlipStart ?? (viewModel.pageFlipGoingForward ? 80 : -80)
+            pendingFlipStart = nil
+            pageTransitionOffset = start
+            pageTransitionOpacity = dragDriven ? 1.0 : 0.0
+            withAnimation(.spring(duration: 0.4, bounce: 0.15)) {
                 pageTransitionOffset = 0
                 pageTransitionOpacity = 1.0
             }
@@ -386,7 +459,7 @@ struct LaunchpadView: View {
         // 注意：这里刻意不加 `.id(currentPageIndex)`。
         // 原先靠 .id + transition 实现翻页滑动动画，但翻页会改变视图身份，
         // 把正在拖拽的图标（及其手势）整个销毁重建，导致「拖到第二页就卡死」。
-        // 现在翻页改为单页渲染 + onChange 方向性滑入，手势不受影响。
+        // 现在翻页改为单页渲染 + 拖拽中渲染相邻页 + onChange 方向性滑入，手势不受影响。
     }
 
     // MARK: - 拖拽浮动图标
