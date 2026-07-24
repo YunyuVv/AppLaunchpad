@@ -34,8 +34,9 @@ struct FolderExpandedView: View {
     @State private var dragCursorIndex: Int = 0
     /// 当前拖拽光标全局位置
     @State private var dragLocation: CGPoint = .zero
-    /// 各 app cell 的全局 frame
-    @State private var cellFrames: [String: CGRect] = [:]
+    /// 几何存储（引用类型）：仅测量首格全局 frame，供拖拽落点纯几何推导。
+    /// 用 class 避免 @State 值变更触发重渲染死循环；面板在拖拽期间不移动，几何稳定。
+    @State private var geoStore = FolderGeoStore()
     /// 正在拖出面板范围（→ 面板立即透明）
     @State private var isDraggingOut = false
 
@@ -142,6 +143,8 @@ struct FolderExpandedView: View {
     private var cellVisualWidth: CGFloat { iconSize + 16 }
     /// 列间距 = HStack spacing（保持与原实现一致）。
     private let hSpacing: CGFloat = 24
+    /// 行间距 = VStack spacing（保持与原实现一致）。
+    private let vSpacing: CGFloat = 24
     /// 内容左右内边距（与 .padding(.horizontal, 28) 对齐）。
     private let sidePad: CGFloat = 28
 
@@ -154,6 +157,55 @@ struct FolderExpandedView: View {
         let available = max(0, panelW - 2 * sidePad)
         let cols = Int((available + hSpacing) / (cellW + hSpacing))
         return max(1, min(cols, count))
+    }
+
+    // MARK: - 几何落点（仿主网格 GridGeometry，替代逐格 frame 命中测试）
+
+    /// 文件夹面板网格几何（全局坐标系），供拖拽落点纯几何推导。
+    /// 与主网格 GridGeometry.slotUnderCursor 同算法：均匀格点、间隙中点切列/行，无盲区、零延迟。
+    private struct FolderGeometry {
+        let origin: CGPoint
+        let columns: Int
+        let rows: Int
+        let cellW: CGFloat
+        let cellH: CGFloat
+        let hSpacing: CGFloat
+        let vSpacing: CGFloat
+
+        func slotUnderCursor(_ p: CGPoint) -> Int {
+            let lx = p.x - origin.x
+            let ly = p.y - origin.y
+            let strideX = cellW + hSpacing
+            let strideY = cellH + vSpacing
+            guard strideX > 0, strideY > 0, columns > 0, rows > 0 else { return 0 }
+            let rawCol = Int((lx + hSpacing / 2) / strideX)
+            let rawRow = Int((ly + vSpacing / 2) / strideY)
+            let col = min(max(rawCol, 0), columns - 1)
+            let row = min(max(rawRow, 0), rows - 1)
+            return row * columns + col
+        }
+    }
+
+    /// 几何存储：仅持有首格全局 frame（由 PreferenceKey 测量一次写入）。
+    /// 引用类型 + @State 持有，不重新赋值 → 不触发重渲染；拖拽期间面板不动，几何稳定。
+    private final class FolderGeoStore { var firstCell: CGRect = .zero }
+
+    private var currentColumns: Int {
+        let pw = panelFrameBox.frame.width
+        return Self.computeColumns(panelW: pw, cellW: cellVisualWidth,
+                                   hSpacing: hSpacing, sidePad: sidePad, count: orderedIDs.count)
+    }
+    private var currentRows: Int {
+        let c = currentColumns
+        return c > 0 ? Int((orderedIDs.count + c - 1) / c) : 1
+    }
+    /// 由首格测量的全局 frame 推导几何；拖拽期间面板不移动，几何稳定。返回 nil 表示尚未测量好。
+    private func folderGeometryNow(columns: Int, rowsCount: Int) -> FolderGeometry? {
+        let f = geoStore.firstCell
+        guard f != .zero, columns > 0, rowsCount > 0 else { return nil }
+        return FolderGeometry(origin: f.origin, columns: columns, rows: rowsCount,
+                              cellW: f.width, cellH: f.height,
+                              hSpacing: hSpacing, vSpacing: vSpacing)
     }
 
     private func appGrid(panelW: CGFloat, panelH: CGFloat, visualApps: [AppInfo]) -> some View {
@@ -173,16 +225,18 @@ struct FolderExpandedView: View {
                         ForEach(rows[rowIdx]) { app in
                             let isDragged = dragSourceIndex != nil
                                 && orderedIDs.firstIndex(of: app.bundleID) == dragSourceIndex
+                            let isFirst = rowIdx == 0 && rows[rowIdx].first?.bundleID == app.bundleID
                             AppIconView(app: app, iconSize: iconSize, isEditMode: false,
                                         onTap: { onLaunch(app) },
                                         onLongPress: {},
                                         onDelete: nil)
                                 .opacity(isDragged ? 0.0 : 1.0)
                                 .background(
+                                    // 仅首格：测量其全局 frame，供纯几何落点（替代逐格 cellFrames 命中测试）
                                     GeometryReader { cg in
                                         Color.clear.preference(
-                                            key: CellFrameKey.self,
-                                            value: [app.bundleID: cg.frame(in: .global)]
+                                            key: FirstCellFrameKey.self,
+                                            value: isFirst ? cg.frame(in: .global) : .zero
                                         )
                                     }
                                 )
@@ -203,8 +257,8 @@ struct FolderExpandedView: View {
         // 限制 ScrollView 高度，否则 VStack 的 maxHeight:.infinity 拿不到视口约束。
         .frame(height: availableH)
         .scrollDisabled(dragSourceIndex != nil)
-        .onPreferenceChange(CellFrameKey.self) { frames in
-            cellFrames.merge(frames) { _, new in new }
+        .onPreferenceChange(FirstCellFrameKey.self) { rect in
+            geoStore.firstCell = rect
         }
     }
 
@@ -233,10 +287,11 @@ struct FolderExpandedView: View {
                     return
                 }
 
-                // 内部 make-way：通过 cellFrames hit-test 更新目标槽位
-                if let targetID = hitTestApp(at: value.location),
-                   let targetIdx = orderedIDs.firstIndex(of: targetID) {
-                    dragCursorIndex = targetIdx
+                // 内部 make-way：纯几何落点（与主网格一致，间隙里也连续、零延迟、无盲区）
+                let cols = currentColumns
+                let rws = currentRows
+                if let geo = folderGeometryNow(columns: cols, rowsCount: rws) {
+                    dragCursorIndex = geo.slotUnderCursor(value.location)
                 }
             }
             .onEnded { value in
@@ -251,10 +306,12 @@ struct FolderExpandedView: View {
                     return
                 }
 
-                // 内部重排
+                // 内部重排：几何落点决定目标槽位（与主网格一致）
                 guard let src = dragSourceIndex, src < orderedIDs.count else { return }
-                let targetID = hitTestApp(at: value.location)
-                let dst = targetID.flatMap { orderedIDs.firstIndex(of: $0) } ?? src
+                let cols = currentColumns
+                let rws = currentRows
+                let slot = folderGeometryNow(columns: cols, rowsCount: rws)?.slotUnderCursor(value.location)
+                let dst = slot.flatMap { min(max($0, 0), orderedIDs.count - 1) } ?? src
                 guard dst != src else { return }
 
                 withAnimation(.spring(response: 0.3, dampingFraction: 0.9)) {
@@ -264,20 +321,15 @@ struct FolderExpandedView: View {
                 onReorder?(orderedIDs)
             }
     }
-
-    private func hitTestApp(at location: CGPoint) -> String? {
-        for (bundleID, frame) in cellFrames where frame.contains(location) {
-            return bundleID
-        }
-        return nil
-    }
 }
 
 // MARK: - Preference Keys
 
-private struct CellFrameKey: PreferenceKey {
-    nonisolated(unsafe) static var defaultValue: [String: CGRect] = [:]
-    static func reduce(value: inout [String: CGRect], nextValue: () -> [String: CGRect]) {
-        value.merge(nextValue()) { _, new in new }
+/// 仅测量首格全局 frame（供纯几何落点推导），非逐格命中测试。
+private struct FirstCellFrameKey: PreferenceKey {
+    nonisolated(unsafe) static var defaultValue: CGRect = .zero
+    static func reduce(value: inout CGRect, nextValue: () -> CGRect) {
+        let v = nextValue()
+        if v != .zero { value = v }
     }
 }
