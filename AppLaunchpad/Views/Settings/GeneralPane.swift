@@ -10,16 +10,16 @@ struct GeneralPane: View {
 
     var body: some View {
         Form {
-            Section("外观") {
+            Section {
                 HStack(alignment: .top, spacing: 12) {
+                    Text("外观")
+                        .font(.callout)
+                    Spacer(minLength: 0)
                     appearanceCard(mode: .auto,  label: "自动", imageName: "AppearanceAuto")
                     appearanceCard(mode: .light, label: "浅色", imageName: "AppearanceLight")
                     appearanceCard(mode: .dark,  label: "深色", imageName: "AppearanceDark")
                 }
                 .frame(maxWidth: .infinity)
-                Text("「自动」跟随系统外观；选择「浅色」或「深色」会立即切换全 App 的外观，文字配色随之变化。")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
             }
 
             Section("开机启动") {
@@ -77,7 +77,7 @@ struct GeneralPane: View {
                 Image(imageName)
                     .resizable()
                     .scaledToFit()
-                    .frame(width: 110, height: 73)
+                    .frame(width: 88, height: 58)
                     .overlay(
                         RoundedRectangle(cornerRadius: 10, style: .continuous)
                             .strokeBorder(
@@ -86,6 +86,7 @@ struct GeneralPane: View {
                             )
                     )
                     .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                    .shadow(color: .black.opacity(0.12), radius: 2, x: 0, y: 1)
                 Text(label)
                     .font(.callout)
                     .foregroundStyle(isSelected ? Color.accentColor : .primary)

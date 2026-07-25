@@ -35,7 +35,7 @@ struct SettingsView: View {
 
 struct SettingsNavigationContent: View {
     @Bindable private var prefs = UserPreferences.shared
-    @State private var selected: SettingsSection? = .appearance
+    @State private var selected: SettingsSection? = .general
     @State private var columnVisibility: NavigationSplitViewVisibility = .all
 
     var body: some View {
