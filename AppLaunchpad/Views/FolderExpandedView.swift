@@ -82,9 +82,18 @@ struct FolderExpandedView: View {
         }
 
         ZStack {
-            Color.black.opacity(0.45)
+            // 背景虚化层（方案 C：跟随全局背景样式自适应）：
+            // 磨砂模式 → .withinWindow 毛玻璃（模糊窗口内主网格）；
+            // 玻璃模式 → NSGlassEffectView 液态玻璃（折射其下网格，与全屏背景一致）。
+            // 点击空白处关闭手势挂在最底层 backdrop 上，dim 层放行命中。
+            FolderBackdropView(isGlass: prefs.backgroundStyle == 1)
                 .ignoresSafeArea()
                 .onTapGesture { onDismiss() }
+            // 轻压暗层：虚化本身已降噪，压暗度低于原 0.45；
+            // 玻璃模式更轻（0.2）以保留折射感，磨砂模式 0.3 补偿二次模糊偏柔。
+            Color.black.opacity(prefs.backgroundStyle == 1 ? 0.2 : 0.3)
+                .ignoresSafeArea()
+                .allowsHitTesting(false)
 
             GeometryReader { geo in
                 // 面板取屏宽 55%（之前 70% 偏胖）：narrower → 同屏宽下每行自然容纳列数变少，
@@ -354,4 +363,34 @@ private struct FirstCellFrameKey: PreferenceKey {
         let v = nextValue()
         if v != .zero { value = v }
     }
+}
+
+// MARK: - 文件夹背景虚化层（方案 C）
+
+/// 文件夹面板背后的虚化层：模糊/折射「窗口内的主网格」（非桌面），风格跟随全局背景样式。
+/// - 磨砂模式：`NSVisualEffectView(blendingMode: .withinWindow, material: .fullScreenUI)`
+///   模糊窗口自身内容（与主网格同窗口，故能虚化它），是 macOS 菜单/弹窗虚化自身内容的标准做法。
+/// - 玻璃模式：`NSGlassEffectView` 液态玻璃，折射其下的网格，与全屏背景的玻璃观感一致。
+/// 注：全屏背景 `BackgroundView` 用的是 `.behindWindow`（模糊桌面），与本层 `.withinWindow`（模糊
+/// 窗口内网格）是不同的混合模式，不可混用——文件夹背后要虚化的是窗口内的主网格，必须用 withinWindow。
+private struct FolderBackdropView: NSViewRepresentable {
+    var isGlass: Bool
+
+    func makeNSView(context: Context) -> NSView {
+        if isGlass {
+            let glass = NSGlassEffectView()
+            glass.cornerRadius = 0      // 全屏无圆角
+            glass.tintColor = nil       // 跟随系统环境
+            glass.style = .regular      // 常规折射玻璃
+            return glass
+        } else {
+            let vev = NSVisualEffectView()
+            vev.material = .fullScreenUI
+            vev.blendingMode = .withinWindow   // 模糊窗口内主网格（关键）
+            vev.state = .active
+            return vev
+        }
+    }
+
+    func updateNSView(_ nsView: NSView, context: Context) {}
 }
