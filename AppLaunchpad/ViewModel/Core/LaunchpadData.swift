@@ -47,7 +47,16 @@ final class LaunchpadData {
 
     // 键盘导航选中态
     var selectedSlotIndex: Int? = nil     // 当前页网格内选中的槽位
-    var selectedSearchIndex: Int? = nil   // 搜索结果中选中的索引
+    var selectedSearchIndex: Int? = nil   // 搜索结果中选中的索引（跨所有结果页的全局索引）
+
+    // 搜索结果分页状态：搜索结果超过一屏时按 cols×rows 分多页，可滑动/点圆点/方向键翻页
+    var searchPageIndex: Int = 0
+    /// 由视图按当前行列数写入（= 每页格数）；默认 0 时退化为 itemsPerPage
+    var searchItemsPerPage: Int = 0
+    /// 由视图写入的搜索命中总数（避免 SearchController 反向依赖 Data）
+    var searchResultCount: Int = 0
+    /// 由视图写入的当前列数（targetScreen 口径，与 searchItemsPerPage 同源），供键盘导航跨页边界判定
+    var searchColumns: Int = 0
 
     // 翻页方向（供视图层 transition 使用）
     private(set) var pageFlipGoingForward: Bool = true
@@ -87,6 +96,30 @@ final class LaunchpadData {
         guard index >= 0, index < totalPages else { return }
         pageFlipGoingForward = index > currentPageIndex
         currentPageIndex = index
+    }
+
+    // MARK: - 搜索结果分页
+
+    var searchTotalPages: Int {
+        let per = max(searchItemsPerPage, 1)
+        guard searchResultCount > 0 else { return 1 }
+        return (searchResultCount + per - 1) / per
+    }
+
+    func goToSearchPage(_ index: Int) {
+        guard index >= 0, index < searchTotalPages else { return }
+        pageFlipGoingForward = index > searchPageIndex
+        searchPageIndex = index
+    }
+
+    func goToNextSearchPage() {
+        guard searchPageIndex < searchTotalPages - 1 else { return }
+        goToSearchPage(searchPageIndex + 1)
+    }
+
+    func goToPreviousSearchPage() {
+        guard searchPageIndex > 0 else { return }
+        goToSearchPage(searchPageIndex - 1)
     }
 
     func clearSelection() {

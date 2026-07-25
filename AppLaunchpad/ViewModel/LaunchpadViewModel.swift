@@ -57,6 +57,13 @@ final class LaunchpadViewModel {
     var totalPages: Int { data.totalPages }
     var pageFlipGoingForward: Bool { data.pageFlipGoingForward }
 
+    // 搜索结果分页（→ data）
+    var searchPageIndex: Int { get { data.searchPageIndex } set { data.searchPageIndex = newValue } }
+    var searchTotalPages: Int { data.searchTotalPages }
+    var searchResultCount: Int { get { data.searchResultCount } set { data.searchResultCount = newValue } }
+    var searchItemsPerPage: Int { get { data.searchItemsPerPage } set { data.searchItemsPerPage = newValue } }
+    var searchColumns: Int { get { data.searchColumns } set { data.searchColumns = newValue } }
+
     var isSearching: Bool { search.isSearching }
     var searchResults: [AppInfo] { search.searchResults }
 
@@ -74,6 +81,9 @@ final class LaunchpadViewModel {
     func goToPreviousPage() { data.goToPreviousPage() }
     func goToNextPage() { data.goToNextPage() }
     func goToPage(_ index: Int) { data.goToPage(index) }
+    func goToSearchPage(_ index: Int) { data.goToSearchPage(index) }
+    func goToNextSearchPage() { data.goToNextSearchPage() }
+    func goToPreviousSearchPage() { data.goToPreviousSearchPage() }
 
     // 触控板跟手翻页：实时偏移 + 松手翻页意图（→ data）
     var trackpadPagingOffsetX: CGFloat {

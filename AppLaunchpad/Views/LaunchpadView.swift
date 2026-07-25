@@ -201,6 +201,10 @@ struct LaunchpadView: View {
                 try? await Task.sleep(nanoseconds: 8_000_000)  // 8ms，一帧后启动弹入动画
                 appeared = true
             }
+            // 搜索词变化时回到搜索结果第 0 页（避免停留在上一轮查询的末页）
+            .onChange(of: viewModel.searchText) { _, _ in
+                viewModel.searchPageIndex = 0
+            }
         }
     }
 
@@ -253,11 +257,15 @@ struct LaunchpadView: View {
     private var pagingDragGesture: some Gesture {
         DragGesture(minimumDistance: 30, coordinateSpace: .global)
             .onChanged { value in
-                // 起点压在任何图标（app 或文件夹）：交给 globalDragGesture 或点击，这里让行，不翻页。
-                // 落在 cell 间隙 / 网格外则正常翻页。
-                guard !viewModel.isSearching,
-                      !viewModel.dragState.isDragging,
-                      !viewModel.anyItemAtIconPoint(value.startLocation) else {
+                // 拖拽图标进行中：让行（交给 globalDragGesture 处理图标拖动）。
+                guard !viewModel.dragState.isDragging else {
+                    dragOffsetX = 0
+                    return
+                }
+                // 非搜索态：起点压在图标（app/文件夹）上 → 让行（图标拖拽由 globalDragGesture 接管）。
+                // 搜索态不拖图标，整屏空白/图标均可发起翻页，故跳过此判定。
+                if !viewModel.isSearching,
+                   viewModel.anyItemAtIconPoint(value.startLocation) {
                     dragOffsetX = 0
                     return
                 }
@@ -266,9 +274,12 @@ struct LaunchpadView: View {
                 isDragging = true
             }
             .onEnded { value in
-                guard !viewModel.isSearching,
-                      !viewModel.dragState.isDragging,
-                      !viewModel.anyItemAtIconPoint(value.startLocation) else {
+                guard !viewModel.dragState.isDragging else {
+                    dragOffsetX = 0
+                    return
+                }
+                if !viewModel.isSearching,
+                   viewModel.anyItemAtIconPoint(value.startLocation) {
                     dragOffsetX = 0
                     return
                 }
@@ -277,6 +288,33 @@ struct LaunchpadView: View {
                 let startX = value.translation.width
                 let goingNext = startX < -threshold
                 let goingPrev = startX > threshold
+
+                // 搜索态：翻「搜索结果页」而非网格页
+                if viewModel.isSearching {
+                    let current = viewModel.searchPageIndex
+                    let total = viewModel.searchTotalPages
+                    let target = goingNext ? min(current + 1, total - 1)
+                                : goingPrev ? max(current - 1, 0)
+                                : current
+                    if target == current {
+                        pageTransitionOffset = startX
+                        pageTransitionOpacity = 1.0
+                        withAnimation(.spring(duration: 0.4, bounce: 0.15)) {
+                            pageTransitionOffset = 0
+                        }
+                    } else {
+                        let W = viewModel.gridGeometry?.size.width ?? 0
+                        let start = goingNext ? (startX + W) : (startX - W)
+                        pendingFlipStart = start
+                        pageTransitionOffset = start
+                        pageTransitionOpacity = 1.0
+                        viewModel.goToSearchPage(target)
+                    }
+                    dragOffsetX = 0
+                    return
+                }
+
+                // 非搜索态（原逻辑）
                 let current = viewModel.currentPageIndex
                 let total = viewModel.totalPages
                 let target = goingNext ? min(current + 1, total - 1)
@@ -320,7 +358,18 @@ struct LaunchpadView: View {
 
     private var pageIndicatorArea: some View {
         Group {
-            if !viewModel.isSearching && viewModel.totalPages > 1 {
+            if viewModel.isSearching {
+                // 搜索结果分页指示器：结果超过一页时显示圆点
+                if viewModel.searchTotalPages > 1 {
+                    PageIndicatorView(
+                        totalPages: viewModel.searchTotalPages,
+                        currentPage: viewModel.searchPageIndex,
+                        onTap: { viewModel.goToSearchPage($0) }
+                    )
+                } else {
+                    Color.clear
+                }
+            } else if viewModel.totalPages > 1 {
                 PageIndicatorView(
                     totalPages: viewModel.totalPages,
                     currentPage: viewModel.currentPageIndex,
@@ -334,23 +383,69 @@ struct LaunchpadView: View {
     }
 
     private func searchResultsView(iconSize: CGFloat, cols: Int, rows: Int) -> some View {
-        let items = viewModel.searchResults.map { LayoutItem.app(bundleID: $0.bundleID) }
-        return Group {
-            if items.isEmpty {
-                Text("未找到应用").font(.system(size: 18)).foregroundStyle(.white.opacity(0.6))
-            } else {
-                GridPageView(
-                    items: items, apps: viewModel.allApps,
+        let per = max(cols * rows, 1)
+        let results = viewModel.searchResults
+        // 写回分页参数（每页格数 / 命中总数）供 Data 计算 searchTotalPages，
+        // 避免 SearchController 反向依赖 Data。
+        let _ = { viewModel.searchResultCount = results.count; viewModel.searchItemsPerPage = per; viewModel.searchColumns = cols }()
+        let totalPages = viewModel.searchTotalPages
+        let pageIndex = min(max(viewModel.searchPageIndex, 0), max(0, totalPages - 1))
+        let start = pageIndex * per
+        let end = min(start + per, results.count)
+        let pageItems = Array(results[start..<end]).map { LayoutItem.app(bundleID: $0.bundleID) }
+        // 键盘选中项（全局索引）映射到「当前页局部槽位」；跨页时仅当前页高亮。
+        let localSelected: Int? = {
+            guard let sel = viewModel.selectedSearchIndex, sel >= start, sel < end else { return nil }
+            return sel - start
+        }()
+        return GeometryReader { geo in
+            let gRect = geo.frame(in: .global)
+            let cellW = (gRect.width - effectiveHorizontalSpacing() * CGFloat(cols - 1)) / CGFloat(cols)
+            let cellH = (gRect.height - effectiveVerticalSpacing() * CGFloat(rows - 1)) / CGFloat(rows)
+            // 写入网格几何（@ObservationIgnored，变更不触发重渲染），供翻页过渡取页宽 W，
+            // 与 pagingView 保持一致；搜索态无拖拽，origin 短时偏移不影响（仅用 width）。
+            let _ = {
+                viewModel.gridGeometry = GridGeometry(
+                    origin: gRect.origin, size: gRect.size,
                     columns: cols, rows: rows,
+                    cellW: cellW, cellH: cellH,
                     hSpacing: effectiveHorizontalSpacing(), vSpacing: effectiveVerticalSpacing(),
-                    iconSize: iconSize,
-                    pageIndex: 0, selectedSlotIndex: viewModel.selectedSearchIndex, isEditMode: false, dragState: DragState(),
-                    viewModel: viewModel,
-                    onTapApp: { viewModel.launch($0) },
-                    onLongPress: {},
-                    onBeginDrag: { _, _ in }, onUpdateDragTarget: { _, _ in }, onEndDrag: {},
-                    onTapFolder: { _ in }
+                    iconSize: iconSize
                 )
+            }()
+            Group {
+                if results.isEmpty {
+                    Text("未找到应用").font(.system(size: 18)).foregroundStyle(.white.opacity(0.6))
+                } else {
+                    GridPageView(
+                        items: pageItems, apps: viewModel.allApps,
+                        columns: cols, rows: rows,
+                        hSpacing: effectiveHorizontalSpacing(), vSpacing: effectiveVerticalSpacing(),
+                        iconSize: iconSize,
+                        pageIndex: pageIndex, selectedSlotIndex: localSelected, isEditMode: false, dragState: DragState(),
+                        viewModel: viewModel,
+                        onTapApp: { viewModel.launch($0) },
+                        onLongPress: {},
+                        onBeginDrag: { _, _ in }, onUpdateDragTarget: { _, _ in }, onEndDrag: {},
+                        onTapFolder: { _ in }
+                    )
+                }
+            }
+        }
+        // 翻页滑动过渡：与网格翻页一致的「整页宽方向性滑入」（无淡入）。
+        // 注意：offset 直接用 pageTransitionOffset，翻页期间不跟手（松手后整体滑入）。
+        .offset(x: pageTransitionOffset)
+        .opacity(pageTransitionOpacity)
+        .onChange(of: viewModel.searchPageIndex) { oldValue, newValue in
+            guard oldValue != newValue else { return }
+            let W = viewModel.gridGeometry?.size.width ?? 0
+            let start = pendingFlipStart ?? (viewModel.pageFlipGoingForward ? W : -W)
+            pendingFlipStart = nil
+            pageTransitionOffset = start
+            pageTransitionOpacity = 1.0
+            withAnimation(.spring(duration: 0.4, bounce: 0.15)) {
+                pageTransitionOffset = 0
+                pageTransitionOpacity = 1.0
             }
         }
     }

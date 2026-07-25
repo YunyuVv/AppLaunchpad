@@ -180,8 +180,8 @@ final class LaunchpadWindowController {
 
         scrollMonitor = NSEvent.addLocalMonitorForEvents(matching: .scrollWheel) { [weak self] event in
             // 拖拽中 / 编辑态下禁用滚轮翻页：避免拖到其他页时滚动额外翻页干扰落点（冲突 C3）
+            // 注意：搜索态放开（仅编辑态/拖拽中禁用），让触控板双指横扫 / 鼠标滚轮也能翻搜索结果页。
             guard let self,
-                  !viewModel.isSearching,
                   !viewModel.dragState.isDragging,
                   !viewModel.isEditMode else { return event }
             guard event.momentumPhase.isEmpty else { return event }  // 忽略惯性阶段
@@ -216,21 +216,32 @@ final class LaunchpadWindowController {
                         let virtualX = accumulatedScrollX * gain
                         let threshold = pageW * 0.10
                         let goingNext = virtualX < 0
-                        let current = viewModel.currentPageIndex
-                        let total = viewModel.totalPages
-                        let target = goingNext ? min(current + 1, total - 1) : max(current - 1, 0)
-                        if abs(virtualX) > threshold, target != current {
-                            // 提交翻页意图（一次性）。视图层 onChange 同步设起点后 goToPage，
-                            // 复用鼠标拖拽的连续滑入，避免闪现正中。
-                            viewModel.trackpadPagingCommit = TrackpadPageFlip(
-                                offset: max(-pageW, min(pageW, virtualX)),
-                                target: target
-                            )
+                        if viewModel.isSearching {
+                            // 搜索态：翻「搜索结果页」（直接在视图层 onChange(searchPageIndex) 触发滑入）
+                            let current = viewModel.searchPageIndex
+                            let total = viewModel.searchTotalPages
+                            let target = goingNext ? min(current + 1, total - 1) : max(current - 1, 0)
+                            if abs(virtualX) > threshold, target != current {
+                                viewModel.goToSearchPage(target)
+                            }
                             viewModel.trackpadPagingOffsetX = 0
                         } else {
-                            // 未越阈值：当前页弹簧回正中（视图层 ZStack 跟手渲染内动画回 0 → 自动切单页）
-                            withAnimation(.spring(duration: 0.4, bounce: 0.15)) {
+                            let current = viewModel.currentPageIndex
+                            let total = viewModel.totalPages
+                            let target = goingNext ? min(current + 1, total - 1) : max(current - 1, 0)
+                            if abs(virtualX) > threshold, target != current {
+                                // 提交翻页意图（一次性）。视图层 onChange 同步设起点后 goToPage，
+                                // 复用鼠标拖拽的连续滑入，避免闪现正中。
+                                viewModel.trackpadPagingCommit = TrackpadPageFlip(
+                                    offset: max(-pageW, min(pageW, virtualX)),
+                                    target: target
+                                )
                                 viewModel.trackpadPagingOffsetX = 0
+                            } else {
+                                // 未越阈值：当前页弹簧回正中（视图层 ZStack 跟手渲染内动画回 0 → 自动切单页）
+                                withAnimation(.spring(duration: 0.4, bounce: 0.15)) {
+                                    viewModel.trackpadPagingOffsetX = 0
+                                }
                             }
                         }
                     } else {
@@ -258,7 +269,12 @@ final class LaunchpadWindowController {
     private func flipPage(deltaX: CGFloat) {
         let now = Date()
         guard now.timeIntervalSince(lastPageFlipTime) > 0.3 else { return }
-        if deltaX < -80 {
+        if viewModel.isSearching {
+            // 搜索态：翻搜索结果页
+            if deltaX < -80 { viewModel.goToNextSearchPage() }
+            else if deltaX > 80 { viewModel.goToPreviousSearchPage() }
+            lastPageFlipTime = now
+        } else if deltaX < -80 {
             withAnimation(.spring(duration: 0.38, bounce: 0.18)) {
                 viewModel.goToNextPage()
             }
