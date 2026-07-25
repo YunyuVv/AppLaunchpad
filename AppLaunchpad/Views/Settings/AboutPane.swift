@@ -34,7 +34,7 @@ struct AboutPane: View {
                     .foregroundStyle(.secondary)
             }
 
-            Text("原生打造的 macOS 启动台：支持拼音搜索、文件夹分组、多显示器同步，以及可精调的液态玻璃外观。")
+            Text("原生打造的 macOS 启动台：支持模糊搜索、文件夹分组、多显示器支持，以及可精调的液态玻璃外观。")
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
