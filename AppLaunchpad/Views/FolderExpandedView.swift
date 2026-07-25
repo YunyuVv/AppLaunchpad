@@ -1,4 +1,5 @@
 import SwiftUI
+import AppKit
 
 /// 文件夹展开视图：占屏幕 70% overlay，支持弹簧让位拖拽排序 + 拖出回到主网格。
 /// 内部拖拽走自管 make-way（与主网格逻辑一致），但不支持在展开视图内创建子文件夹。
@@ -39,6 +40,8 @@ struct FolderExpandedView: View {
     @State private var geoStore = FolderGeoStore()
     /// 正在拖出面板范围（→ 面板立即透明）
     @State private var isDraggingOut = false
+    /// 背景样式偏好（读 backgroundStyle 以在磨砂/液态玻璃间切换面板背景）
+    @State private var prefs = UserPreferences.shared
 
     init(folder: FolderInfo, apps: [AppInfo], iconSize: CGFloat,
          onDismiss: @escaping () -> Void, onLaunch: @escaping (AppInfo) -> Void,
@@ -92,7 +95,8 @@ struct FolderExpandedView: View {
                 // 并额外留 18pt 间距，避免面板贴住/压住搜索框。与 LaunchpadView.autoTopPadding 同公式。
                 let topInset = max(56, geo.size.height * 0.07) + 56
 
-                VStack(spacing: 0) {
+                // 面板内容（与几何/手势无关，仅作渲染层，两种背景样式共用）
+                let folderContent = VStack(spacing: 0) {
                     Text(folder.name)
                         .font(.system(size: 18, weight: .semibold))
                         .foregroundStyle(.white)
@@ -103,12 +107,26 @@ struct FolderExpandedView: View {
                         .padding(.horizontal, 28)
                         .padding(.bottom, 28)
                 }
+
+                // 背景样式：液态玻璃 → 内容包进 NSGlassEffectView.contentView；
+                // 磨砂玻璃（默认）→ 沿用 .ultraThinMaterial + 白色描边。
+                // 两种模式共用同一几何（frame/position），仅外层渲染容器不同，
+                // 拖拽/落点几何逻辑不受影响。
+                Group {
+                    if prefs.backgroundStyle == 1 {
+                        GlassHostingView(cornerRadius: 16) {
+                            folderContent
+                        }
+                    } else {
+                        folderContent
+                            .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 16))
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 16)
+                                    .stroke(.white.opacity(0.12), lineWidth: 0.5)
+                            )
+                    }
+                }
                 .frame(width: panelW, height: panelH)
-                .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 16))
-                .overlay(
-                    RoundedRectangle(cornerRadius: 16)
-                        .stroke(.white.opacity(0.12), lineWidth: 0.5)
-                )
                 .position(x: geo.size.width / 2, y: topInset + panelH / 2)
                 // 面板 frame = 外层 GeometryReader 填满全屏 → 计算 70% 居中区域的全局坐标。
                 // 用 onAppear 写入引用类型 FrameBox，手势闭包通过指针始终读到最新值

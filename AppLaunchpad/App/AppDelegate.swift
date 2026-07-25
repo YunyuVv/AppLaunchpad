@@ -47,7 +47,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if let opener = settingsOpener {
             opener()
         } else {
-            NSApp.sendAction(Selector(("showWindow:")), to: nil, from: nil)
+            NSApp.sendAction(#selector(NSWindowController.showWindow(_:)), to: nil, from: nil)
         }
     }
 

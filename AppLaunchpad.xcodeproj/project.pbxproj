@@ -11,6 +11,7 @@
 		02F15AEC9E7FAE34A96F0D31 /* LaunchpadData.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2BAB486B8C316F3029ECDF70 /* LaunchpadData.swift */; };
 		1468118946B482229EFFF870 /* IconCache.swift in Sources */ = {isa = PBXBuildFile; fileRef = C9E6F8441A87939DD7AD5F64 /* IconCache.swift */; };
 		264E5AED4ADD07EFC41B62E3 /* DragState.swift in Sources */ = {isa = PBXBuildFile; fileRef = FCE6821DCD64715CC5D42BD7 /* DragState.swift */; };
+		28194489A459234E47477E67 /* GlassHostingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = EEB021BA310868EB2CFEA47A /* GlassHostingView.swift */; };
 		2A34A0F611588FDA089AB033 /* LayoutData.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9BA6BC8E074B251A875E3599 /* LayoutData.swift */; };
 		30F2F846DB09A6EE9B5D3683 /* GridPageView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0E7B942F0AE743967FAA542A /* GridPageView.swift */; };
 		33CC86A828615DA440BA4737 /* BackgroundView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6B1AD81D2C9486EF9AF88D3C /* BackgroundView.swift */; };
@@ -86,6 +87,7 @@
 		D3878FE9A34EAF3AAFF0447E /* FolderInfo.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FolderInfo.swift; sourceTree = "<group>"; };
 		E089DBDC860DD0E4D103A82D /* FolderThumbnailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FolderThumbnailView.swift; sourceTree = "<group>"; };
 		E5571F58397D39EAD78E758A /* Array+Chunked.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Array+Chunked.swift"; sourceTree = "<group>"; };
+		EEB021BA310868EB2CFEA47A /* GlassHostingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GlassHostingView.swift; sourceTree = "<group>"; };
 		EEC15481E17707A96309B85C /* FolderController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FolderController.swift; sourceTree = "<group>"; };
 		FA26C5811E8E077635927696 /* AppIconView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppIconView.swift; sourceTree = "<group>"; };
 		FCE6821DCD64715CC5D42BD7 /* DragState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DragState.swift; sourceTree = "<group>"; };
@@ -234,6 +236,7 @@
 				6B1AD81D2C9486EF9AF88D3C /* BackgroundView.swift */,
 				C146C0F827A8BA6F36C2D475 /* FolderExpandedView.swift */,
 				E089DBDC860DD0E4D103A82D /* FolderThumbnailView.swift */,
+				EEB021BA310868EB2CFEA47A /* GlassHostingView.swift */,
 				0E7B942F0AE743967FAA542A /* GridPageView.swift */,
 				646E7C03C74BB5E5619A63B7 /* LaunchpadView.swift */,
 				B13BB2C9D42C5393730D7DF3 /* PageIndicatorView.swift */,
@@ -333,6 +336,7 @@
 				97784A363D6E485702042EEF /* FolderThumbnailView.swift in Sources */,
 				8CA01FD0069796C6ACBB9D30 /* FuzzySearch.swift in Sources */,
 				016083DB42E86EB2EEAD6EF2 /* GesturePane.swift in Sources */,
+				28194489A459234E47477E67 /* GlassHostingView.swift in Sources */,
 				9C7539E2A45061F42D7BB817 /* GridGeometry.swift in Sources */,
 				30F2F846DB09A6EE9B5D3683 /* GridPageView.swift in Sources */,
 				8E06974C52D8B3515680E025 /* HotkeyPane.swift in Sources */,

@@ -23,6 +23,15 @@ final class UserPreferences: @unchecked Sendable {
         }
     }
 
+    /// 背景样式：0 = 磨砂玻璃（当前默认），1 = macOS 26 液态玻璃（Liquid Glass）
+    var backgroundStyle: Int = 0 {
+        didSet {
+            let v = (backgroundStyle == 1) ? 1 : 0
+            if v != backgroundStyle { backgroundStyle = v }
+            defaults.set(backgroundStyle, forKey: Keys.backgroundStyle)
+        }
+    }
+
     /// 每行图标列数（0 = 根据屏幕宽度自动，3~12 = 手动指定）
     var columnCountOverride: Int = 0 {
         didSet { defaults.set(max(0, columnCountOverride), forKey: Keys.columnCountOverride) }
@@ -146,6 +155,7 @@ final class UserPreferences: @unchecked Sendable {
     private init() {
         let d = UserDefaults.standard
         backgroundOverlayOpacity = d.double(forKey: Keys.backgroundOverlayOpacity).clamped(to: 0...0.8).nonZero(default: 0.10)
+        backgroundStyle         = (d.integer(forKey: Keys.backgroundStyle) == 1) ? 1 : 0
         columnCountOverride      = max(0, d.integer(forKey: Keys.columnCountOverride))
         rowCountOverride         = max(0, d.integer(forKey: Keys.rowCountOverride))
         iconSizeOverride         = d.double(forKey: Keys.iconSizeOverride)
@@ -190,6 +200,7 @@ final class UserPreferences: @unchecked Sendable {
         rowCountOverride = 0
         iconSizeOverride = 0
         backgroundOverlayOpacity = 0.10
+        backgroundStyle = 0
         horizontalSpacing = 0
         verticalSpacing = 0
         sidePadding = 0
@@ -257,6 +268,7 @@ final class UserPreferences: @unchecked Sendable {
 
     private enum Keys {
         static let backgroundOverlayOpacity = "backgroundOverlayOpacity"
+        static let backgroundStyle         = "backgroundStyle"
         static let multiMonitorMode         = "multiMonitorMode"
         static let columnCountOverride      = "columnCountOverride"
         static let rowCountOverride         = "rowCountOverride"

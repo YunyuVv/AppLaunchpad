@@ -24,6 +24,17 @@ struct AppearancePane: View {
                 }
             }
 
+            Section("背景样式") {
+                Picker("样式", selection: $prefs.backgroundStyle) {
+                    Text("磨砂玻璃").tag(0)
+                    Text("液态玻璃").tag(1)
+                }
+                .pickerStyle(.segmented)
+                Text("液态玻璃（macOS 26+）会折射桌面背景；切换即时生效，无需重启启动台")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
             Section("网格密度") {
                 // 每行列数
                 VStack(alignment: .leading, spacing: 6) {

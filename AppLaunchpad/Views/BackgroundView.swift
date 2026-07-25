@@ -12,8 +12,15 @@ struct BackgroundView: View {
 
     var body: some View {
         ZStack {
-            ScreenBlurView().ignoresSafeArea()
-            Color.black.opacity(prefs.backgroundOverlayOpacity).ignoresSafeArea()
+            if prefs.backgroundStyle == 1 {
+                // 液态玻璃：全屏 NSGlassEffectView，自身折射窗口后方桌面，无需叠黑遮罩
+                // （黑遮罩叠在玻璃上会发灰、吃掉折射感，故玻璃模式不叠）。
+                GlassBlurView().ignoresSafeArea()
+            } else {
+                // 磨砂玻璃（当前默认）：实时模糊窗口后方内容 + 半透明黑遮罩压暗以提升可读性
+                ScreenBlurView().ignoresSafeArea()
+                Color.black.opacity(prefs.backgroundOverlayOpacity).ignoresSafeArea()
+            }
         }
     }
 }
@@ -29,4 +36,19 @@ private struct ScreenBlurView: NSViewRepresentable {
     }
 
     func updateNSView(_ nsView: NSVisualEffectView, context: Context) {}
+}
+
+/// 封装 NSGlassEffectView（macOS 26 液态玻璃），全屏无圆角、跟随系统环境折射桌面。
+/// 用于「背景样式 = 液态玻璃」模式。面板本身是 borderless + backgroundColor = .clear，
+/// 玻璃能采样窗口后方桌面内容。
+private struct GlassBlurView: NSViewRepresentable {
+    func makeNSView(context: Context) -> NSGlassEffectView {
+        let glass = NSGlassEffectView()
+        glass.cornerRadius = 0           // 全屏无圆角
+        glass.tintColor = nil            // 跟随系统环境
+        glass.style = .regular           // 常规折射玻璃
+        return glass
+    }
+
+    func updateNSView(_ nsView: NSGlassEffectView, context: Context) {}
 }

@@ -62,7 +62,7 @@ struct FolderThumbnailView: View {
         .onTapGesture { onTap() }
         .simultaneousGesture(LongPressGesture(minimumDuration: 0.5).onEnded { _ in onLongPress() })
         .overlay(alignment: .topTrailing) {
-            if showDeleteButton, isEditMode, let onDelete {
+            if showDeleteButton, isEditMode, onDelete != nil {
                 deleteButton
             }
         }

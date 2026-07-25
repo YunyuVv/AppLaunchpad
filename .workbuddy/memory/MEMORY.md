@@ -2,6 +2,8 @@
 
 ## 构建 / 签名 / TCC
 - 构建：`xcodebuild -project AppLaunchpad.xcodeproj -scheme AppLaunchpad -configuration Debug clean build`。**勿**带 ad-hoc 签名（令 TCC 失效）。`project.yml` 固化 Manual+Apple Development+TEAM `2VU69Q9CGK`。改 `project.yml`/新增 `.swift` 后需 `xcodegen generate`。
+- **工作流红线（用户 2026-07-25 明确）**：**改完代码必须编译确认**——`xcodebuild ... clean build`，无 error 才能交付。新增/移动 `.swift` 文件后**务必先 `xcodegen generate` 重新生成 `.xcodeproj`**，否则新建文件不在编译目标 → `Cannot find 'Xxx' in scope` 编译失败（已踩：GlassHostingView.swift 写盘后没 generate，导致 Build Failed）。
+- **macOS 26 SDK 更名**：`NSWorkspace.recycleURLs(_:completionHandler:)` 已重命名为 `recycle(_:completionHandler:)`（同一条「移到废纸篓 + 写 Put Back 元数据」路径，`FileManager.trashItem` 仍不写 Put Back）。`showWindow:` action 声明在 `NSWindowController`（非 `NSWindow`），`#selector` 须写 `NSWindowController.showWindow(_:)`。
 - TCC：Apple Development 证书只绑 identifier+CN，稳定；ad-hoc designated requirement 含二进制哈希，重编译即变→权限失效。残留授权用 `tccutil reset Accessibility com.applaunchpad.app` 清后重授权一次。
 
 ## 编码坑
