@@ -52,11 +52,13 @@ struct FolderThumbnailView: View {
             // 文件夹名称（拖拽浮动图标时隐藏，仅显示 3×3 网格）
             if showName {
                 Text(folder.name)
-                    .font(.system(size: max(10, iconSize * 0.14)))
+                    .font(.system(size: min(max(10, iconSize * 0.14), 16)))
                     .foregroundStyle(.white)
                     .lineLimit(2)
                     .multilineTextAlignment(.center)
-                    .frame(width: iconSize + 16)
+                    // 与普通 app 对齐：白字 + 黑色阴影确保浅色玻璃背景下仍清晰可读
+                    .shadow(color: .black.opacity(0.6), radius: 2, x: 0, y: 1)
+                    .frame(width: iconSize + 20)
             }
         }
         .onTapGesture { onTap() }

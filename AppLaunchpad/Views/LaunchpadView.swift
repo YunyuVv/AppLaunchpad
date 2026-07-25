@@ -168,6 +168,10 @@ struct LaunchpadView: View {
                             f.appIDs = newIDs
                             viewModel.data.layout.folders[folderID] = f
                             viewModel.saveLayout()
+                        },
+                        onRename: { newName in
+                            viewModel.folderController.renameFolder(folderID, to: newName)
+                            viewModel.saveLayout()
                         }
                     )
                     .zIndex(1000)

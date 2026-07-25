@@ -17,6 +17,8 @@ struct FolderExpandedView: View {
     /// 松手：主网格 endDrag 并关闭面板。
     var onDragOutEnd: (() -> Void)?
     var onReorder: (([String]) -> Void)?
+    /// 重命名回调：用户在展开面板里改完文件夹名后触发，父级负责调用 FolderController.renameFolder + saveLayout。
+    var onRename: ((String) -> Void)? = nil
 
     // MARK: - 引用类型容器（解决 SwiftUI 手势闭包对值类型 @State 的快照捕获陷阱）
 
@@ -42,13 +44,21 @@ struct FolderExpandedView: View {
     @State private var isDraggingOut = false
     /// 背景样式偏好（读 backgroundStyle 以在磨砂/液态玻璃间切换面板背景）
     @State private var prefs = UserPreferences.shared
+    /// 重命名状态：是否处于编辑中
+    @State private var isRenaming = false
+    /// 当前展示的文件夹名（rename 后避免依赖父级重新传值，本地即更新）
+    @State private var displayName: String
+    /// 编辑中的草稿名
+    @State private var draftName: String = ""
+    @FocusState private var renameFocused: Bool
 
     init(folder: FolderInfo, apps: [AppInfo], iconSize: CGFloat,
          onDismiss: @escaping () -> Void, onLaunch: @escaping (AppInfo) -> Void,
          onDragOutHandoff: ((AppInfo, CGPoint) -> Void)? = nil,
          onDragOutMove: ((CGPoint) -> Void)? = nil,
          onDragOutEnd: (() -> Void)? = nil,
-         onReorder: (([String]) -> Void)? = nil) {
+         onReorder: (([String]) -> Void)? = nil,
+         onRename: ((String) -> Void)? = nil) {
         self.folder = folder
         self.apps = apps
         self.iconSize = iconSize
@@ -58,7 +68,9 @@ struct FolderExpandedView: View {
         self.onDragOutMove = onDragOutMove
         self.onDragOutEnd = onDragOutEnd
         self.onReorder = onReorder
+        self.onRename = onRename
         self._orderedIDs = State(initialValue: folder.appIDs)
+        self._displayName = State(initialValue: folder.name)
     }
 
     // MARK: - 让位视觉排列
@@ -88,7 +100,11 @@ struct FolderExpandedView: View {
             // 点击空白处关闭手势挂在最底层 backdrop 上，dim 层放行命中。
             FolderBackdropView(isGlass: prefs.backgroundStyle == 1)
                 .ignoresSafeArea()
-                .onTapGesture { onDismiss() }
+                .onTapGesture {
+                    // 编辑态点背景：先保存/退出编辑，再关闭面板
+                    if isRenaming { commitRename() }
+                    onDismiss()
+                }
             // 轻压暗层：虚化本身已降噪，压暗度低于原 0.45；
             // 玻璃模式更轻（0.2）以保留折射感，磨砂模式 0.3 补偿二次模糊偏柔。
             Color.black.opacity(prefs.backgroundStyle == 1 ? 0.2 : 0.3)
@@ -106,15 +122,16 @@ struct FolderExpandedView: View {
 
                 // 面板内容（与几何/手势无关，仅作渲染层，两种背景样式共用）
                 let folderContent = VStack(spacing: 0) {
-                    Text(folder.name)
-                        .font(.system(size: 18, weight: .semibold))
-                        .foregroundStyle(.white)
+                    titleView(panelW: panelW)
                         .padding(.top, 28)
                         .padding(.bottom, 20)
 
                     appGrid(panelW: panelW, panelH: panelH, visualApps: visualApps)
                         .padding(.horizontal, 28)
                         .padding(.bottom, 28)
+                        // 编辑态点面板内容区（app 网格空白/图标）→ 退出编辑：名字变则保存，不变等同取消。
+                        // 点标题输入框内部不会冒泡到此（兄弟视图），不影响光标定位。
+                        .onTapGesture { if isRenaming { commitRename() } }
                 }
 
                 // 背景样式：液态玻璃 → 内容包进 NSGlassEffectView.contentView；
@@ -165,6 +182,76 @@ struct FolderExpandedView: View {
         // 失去命中 → 手势立即结束，无法实现「不松手交接」。
         .opacity(isDraggingOut ? 0 : 1)
         .transition(.opacity)
+    }
+
+    // MARK: - 标题（可点按重命名）
+
+    @ViewBuilder
+    private func titleView(panelW: CGFloat) -> some View {
+        let maxW: CGFloat = min(panelW * 0.85, 360)
+        // 两种状态共用同一固定尺寸容器（maxW × 32），且编辑态不再有「完成/取消」按钮，
+        // 因此点标题进编辑、点外部失焦自动保存，宽高始终不变、UI 零跳动。
+        ZStack {
+            if isRenaming {
+                TextField("文件夹名称", text: $draftName)
+                    .textFieldStyle(.plain)
+                    .font(.system(size: 18, weight: .semibold))
+                    .foregroundStyle(.white)
+                    .multilineTextAlignment(.center)
+                    .frame(width: maxW)
+                    .focused($renameFocused)
+                    .onSubmit { commitRename() }            // 回车 = 保存
+                    .onExitCommand { cancelRename() }        // Esc = 取消
+                    .padding(4)
+                    .background(
+                        RoundedRectangle(cornerRadius: 6)
+                            .fill(.white.opacity(0.12))
+                    )
+                    .transition(.opacity)
+            } else {
+                Button {
+                    startRename()
+                } label: {
+                    Text(displayName)
+                        .font(.system(size: 18, weight: .semibold))
+                        .foregroundStyle(.white)
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.plain)
+                .help("点按可重命名，点外部自动保存")
+                .transition(.opacity)
+            }
+        }
+        .frame(width: maxW, height: 32)
+        .animation(.easeInOut(duration: 0.15), value: isRenaming)
+        // 焦点离开（点击外部 / 切到别处）→ 自动保存，无需任何按钮
+        .onChange(of: renameFocused) { _, isFocused in
+            if !isFocused { commitRename() }
+        }
+    }
+
+    private func startRename() {
+        draftName = displayName
+        isRenaming = true
+        // TextField 进入视图树后再聚焦，避免首帧还没挂载就拿不到焦点
+        DispatchQueue.main.async { renameFocused = true }
+    }
+
+    private func commitRename() {
+        guard isRenaming else { return }
+        let trimmed = draftName.trimmingCharacters(in: .whitespacesAndNewlines)
+        let finalName = trimmed.isEmpty ? displayName : trimmed
+        if finalName != displayName {
+            displayName = finalName
+            onRename?(finalName)
+        }
+        isRenaming = false
+        renameFocused = false
+    }
+
+    private func cancelRename() {
+        isRenaming = false
+        renameFocused = false
     }
 
     // MARK: - App Grid

@@ -26,7 +26,7 @@
 - 显示器选择：`UserPreferences.DisplayTarget`(primary/mouse/specific(CGDirectDisplayID)) → `targetScreen` 解析 NSScreen；`DisplayPane` 枚举 `NSScreen.screens` 列出可选，单显时仅显示"主显示器"不可选。
 
 ## 已落地功能（摘要）
-- 文件夹功能 2026-07-25 已彻底移除（3 文件+folders 字段强制空）。
+- 文件夹功能仍在：`FolderInfo`(name/isUserNamed/appIDs) + `FolderController`(create/add/remove/delete/rename) + `FolderThumbnailView`(网格缩略图) + `FolderExpandedView`(展开面板，标题可点按改名→`renameFolder`+saveLayout) + `DragController` 拖入拖出。`layout.json` 的 `folders` 字段运行时非空（之前"彻底移除"记录有误）。
 - 背景：磨砂（`.behindWindow` ScreenBlurView）/ 液态玻璃（`NSGlassEffectView`）二选一，**默认玻璃**（backgroundStyle 默认 1）。文件夹面板 `FolderBackdropView` 跟随：玻璃 NSGlassEffectView、磨砂 `.withinWindow` 毛玻璃。
 - 右键菜单：打开/在访达中显示/删除（二次确认 `.confirmationDialog`）。删除用 `NSWorkspace.shared.recycle` 保留 Put Back 元数据（禁用 FileManager.trashItem）。
 - 拖拽 clamp 用 items.count，落点几何化（GridGeometry 固定几何），make-way 常驻。
