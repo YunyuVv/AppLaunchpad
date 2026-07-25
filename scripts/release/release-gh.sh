@@ -18,7 +18,7 @@
 #   - 对外固定下载地址（永远指向最新版）：
 #       https://github.com/YunyuVv/AppLaunchpad/releases/latest/download/AppLaunchpad.dmg
 #
-set -eu
+set -e
 
 # 脚本所在目录与仓库根（脚本位于 scripts/release/，仓库根回退两级）
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
