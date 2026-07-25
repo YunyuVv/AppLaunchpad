@@ -34,9 +34,11 @@ struct AboutPane: View {
                     .foregroundStyle(.secondary)
             }
 
-            Text("macOS 26 启动台替代应用")
+            Text("原生打造的 macOS 启动台：支持拼音搜索、文件夹分组、多显示器同步，以及可精调的液态玻璃外观。")
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+                .frame(maxWidth: 320)
 
             // 联系方式：mailto: 链接，点击调起默认邮件 App
             Link(destination: URL(string: "mailto:\(Self.contactEmail)")!) {

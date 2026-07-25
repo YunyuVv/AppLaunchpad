@@ -23,8 +23,9 @@ struct AppLaunchpadApp: App {
         .commands {
             CommandGroup(replacing: .appSettings) {
                 Button("设置…") {
-                    // 直接走 SwiftUI 环境的 openWindow，可靠打开 Window(id:) 场景
-                    openWindow(id: "settings")
+                    // 统一走 AppDelegate.openSettings()：必要时拉起 App 到前台，
+                    // 并妥善处理「窗口已开但未前置」的情况
+                    appDelegate.openSettings()
                 }
                 .keyboardShortcut(",", modifiers: .command)
             }

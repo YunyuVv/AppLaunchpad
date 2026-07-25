@@ -43,10 +43,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         return menu
     }
 
-    @objc private func openSettings() {
-        // 通过 SwiftUI 环境桥接的 openWindow(id:) 打开设置场景，
-        // 而不是 showWindow:（依赖响应者链，对 Window(id:) 场景不可靠）。
-        if let opener = settingsOpener {
+    /// 统一的「打开设置」入口：Dock 菜单、状态栏菜单、⌘, 都走这里。
+    /// 行为要求：
+    /// 1. 若设置窗口此前已关闭 → 打开（创建）它；
+    /// 2. 若设置窗已存在但不在前台（被其它窗口/App 遮挡）→ 激活 App 并把它提到最前。
+    @objc func openSettings() {
+        // 先把 App 自身拉到前台（其它 App 正在前台时尤其必要，
+        // 否则窗口就算创建/前置了，整体仍停留在后台）。
+        NSApp.activate(ignoringOtherApps: true)
+
+        // SwiftUI 的 Window(id: "settings") 场景会把 NSWindow.identifier 设为 "settings"。
+        // 已存在就直接前置（openWindow 对已开窗口在部分 macOS 版本不会前置，必须显式处理）；
+        // 不存在才通过 openWindow 创建（新窗口默认即为 key 并前置）。
+        if let settingsWindow = NSApp.windows.first(where: { $0.identifier?.rawValue == "settings" }) {
+            settingsWindow.makeKeyAndOrderFront(nil)
+        } else if let opener = settingsOpener {
             opener()
         } else {
             NSApp.sendAction(#selector(NSWindowController.showWindow(_:)), to: nil, from: nil)
