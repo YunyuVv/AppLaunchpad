@@ -29,16 +29,9 @@ struct LaunchpadView: View {
     // 设置面板拖动滑块时会立即触发本视图重新布局（实时生效）。
     @Bindable private var prefs = UserPreferences.shared
 
-    /// 目标显示器：跟随设置中的多显示器模式，与窗口定位（WindowController.primaryScreen）保持一致
+    /// 目标显示器：跟随设置中的显示器选择，与窗口定位（WindowController.primaryScreen）保持一致
     private var targetScreen: NSScreen {
-        switch UserPreferences.shared.multiMonitorMode {
-        case .primaryScreen:
-            return NSScreen.screens.first ?? NSScreen.screens[0]
-        case .mouseScreen:
-            let mouse = NSEvent.mouseLocation
-            return NSScreen.screens.first { $0.frame.contains(mouse) }
-                ?? NSScreen.screens.first ?? NSScreen.screens[0]
-        }
+        UserPreferences.shared.targetScreen
     }
 
     /// 外观参数为 0 时的自动推算值，按目标屏幕尺寸比例给出，保证不同分辨率下都协调。

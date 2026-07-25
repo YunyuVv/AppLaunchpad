@@ -5,21 +5,19 @@ import ApplicationServices
 // MARK: - 设置分类
 
 enum SettingsSection: String, CaseIterable, Identifiable, Hashable, Sendable {
-    case appearance = "外观"
-    case display    = "显示器"
-    case gesture    = "手势"
-    case hotkey     = "快捷键"
-    case about      = "关于"
+    case general     = "通用"
+    case appearance  = "外观"
+    case interaction = "交互"
+    case about       = "关于"
 
     var id: String { rawValue }
 
     var icon: String {
         switch self {
-        case .appearance: return "paintbrush"
-        case .display:    return "display"
-        case .gesture:    return "hand.tap"
-        case .hotkey:     return "command"
-        case .about:      return "info.circle"
+        case .general:     return "gearshape"
+        case .appearance:  return "paintbrush"
+        case .interaction: return "keyboard"
+        case .about:       return "info.circle"
         }
     }
 }
@@ -59,21 +57,14 @@ struct SettingsNavigationContent: View {
 
     private var sidebar: some View {
         List(selection: $selected) {
-            Section("常规") {
-                Label("外观", systemImage: SettingsSection.appearance.icon)
-                    .tag(SettingsSection.appearance)
-                Label("显示器", systemImage: SettingsSection.display.icon)
-                    .tag(SettingsSection.display)
-                Label("手势", systemImage: SettingsSection.gesture.icon)
-                    .tag(SettingsSection.gesture)
-            }
-
-            Section("高级") {
-                Label("快捷键", systemImage: SettingsSection.hotkey.icon)
-                    .tag(SettingsSection.hotkey)
-                Label("关于", systemImage: SettingsSection.about.icon)
-                    .tag(SettingsSection.about)
-            }
+            Label("通用", systemImage: SettingsSection.general.icon)
+                .tag(SettingsSection.general)
+            Label("外观", systemImage: SettingsSection.appearance.icon)
+                .tag(SettingsSection.appearance)
+            Label("交互", systemImage: SettingsSection.interaction.icon)
+                .tag(SettingsSection.interaction)
+            Label("关于", systemImage: SettingsSection.about.icon)
+                .tag(SettingsSection.about)
         }
         .listStyle(.sidebar)
     }
@@ -81,14 +72,12 @@ struct SettingsNavigationContent: View {
     @ViewBuilder
     private var detailPane: some View {
         switch selected {
-        case .appearance, .none:
+        case .general, .none:
+            GeneralPane(prefs: prefs)
+        case .appearance:
             AppearancePane(prefs: prefs)
-        case .display:
-            DisplayPane(prefs: prefs)
-        case .gesture:
-            GesturePane(prefs: prefs)
-        case .hotkey:
-            HotkeyPane(prefs: prefs)
+        case .interaction:
+            InteractionPane(prefs: prefs)
         case .about:
             AboutPane()
         }

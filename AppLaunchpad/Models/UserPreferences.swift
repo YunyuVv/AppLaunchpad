@@ -1,5 +1,6 @@
 import Foundation
 import AppKit
+import ServiceManagement
 
 /// 用户偏好设置，持久化到 UserDefaults
 ///
@@ -23,8 +24,8 @@ final class UserPreferences: @unchecked Sendable {
         }
     }
 
-    /// 背景样式：0 = 磨砂玻璃（当前默认），1 = macOS 26 液态玻璃（Liquid Glass）
-    var backgroundStyle: Int = 0 {
+    /// 背景样式：0 = 磨砂玻璃，1 = macOS 26 液态玻璃（Liquid Glass，当前默认）
+    var backgroundStyle: Int = 1 {
         didSet {
             let v = (backgroundStyle == 1) ? 1 : 0
             if v != backgroundStyle { backgroundStyle = v }
@@ -94,22 +95,71 @@ final class UserPreferences: @unchecked Sendable {
         }
     }
 
-    // MARK: - 多显示器
+    // MARK: - 显示器
 
-    enum MultiMonitorMode: String, CaseIterable {
-        case primaryScreen = "primary"
-        case mouseScreen   = "mouse"
+    /// 启动台展示于哪块显示器。
+    /// - primary: 主显示器（默认）
+    /// - mouse:   鼠标所在显示器
+    /// - specific: 指定某块显示器（按 CGDirectDisplayID 稳定标识，拔插/重排也不丢）
+    enum DisplayTarget: Hashable {
+        case primary
+        case mouse
+        case specific(CGDirectDisplayID)
 
-        var label: String {
+        /// 持久化键：primary / mouse / specific:<displayID>
+        var persistenceKey: String {
             switch self {
-            case .primaryScreen: return "主显示器"
-            case .mouseScreen:   return "鼠标所在显示器"
+            case .primary:          return "primary"
+            case .mouse:            return "mouse"
+            case .specific(let id): return "specific:\(id)"
             }
+        }
+
+        init(persistenceKey: String?) {
+            guard let key = persistenceKey, !key.isEmpty else { self = .primary; return }
+            if key == "primary" { self = .primary; return }
+            if key == "mouse"   { self = .mouse;   return }
+            let parts = key.split(separator: ":")
+            if parts.count == 2, parts[0] == "specific", let id = UInt32(parts[1]) {
+                self = .specific(id); return
+            }
+            self = .primary
         }
     }
 
-    var multiMonitorMode: MultiMonitorMode = .primaryScreen {
-        didSet { defaults.set(multiMonitorMode.rawValue, forKey: Keys.multiMonitorMode) }
+    /// 当前偏好：启动台展示的显示器目标（默认主显示器）
+    var displayTarget: DisplayTarget = .primary {
+        didSet { defaults.set(displayTarget.persistenceKey, forKey: Keys.displayTarget) }
+    }
+
+    /// 解析出实际要展示的 NSScreen。
+    /// 指定显示器已断开时回退到主显示器，避免落到空屏。
+    var targetScreen: NSScreen {
+        let screens = NSScreen.screens
+        switch displayTarget {
+        case .primary:
+            return screens.first ?? screens[0]
+        case .mouse:
+            let mouse = NSEvent.mouseLocation
+            return screens.first { $0.frame.contains(mouse) }
+                ?? screens.first ?? screens[0]
+        case .specific(let id):
+            return screens.first { Self.displayID(for: $0) == id }
+                ?? screens.first ?? screens[0]
+        }
+    }
+
+    /// 取屏幕的稳定显示 ID（CGDirectDisplayID）
+    static func displayID(for screen: NSScreen) -> CGDirectDisplayID? {
+        (screen.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? NSNumber)?.uint32Value
+    }
+
+    /// 显示器展示名：名称 + 是否主显 + 分辨率，便于列表里辨认
+    static func screenLabel(_ screen: NSScreen) -> String {
+        let size = screen.frame.size
+        let isMain = (screen == NSScreen.main)
+        let tag = isMain ? "（主显示器）" : ""
+        return "\(screen.localizedName)\(tag)  \(Int(size.width))×\(Int(size.height))"
     }
 
     // MARK: - 全局快捷键
@@ -150,12 +200,40 @@ final class UserPreferences: @unchecked Sendable {
         }
     }
 
+    // MARK: - 开机启动
+
+    /// 是否开机后静默自动启动（默认关闭）。开启后系统登录时自动运行 App，
+    /// App 仅后台常驻，不弹出启动台也不打开设置窗口。改动会同步到系统登录项。
+    var launchAtLogin: Bool = false {
+        didSet {
+            defaults.set(launchAtLogin, forKey: Keys.launchAtLogin)
+            syncLaunchAtLogin()
+        }
+    }
+
+    /// 把「开机自启」偏好同步到系统登录项（ServiceManagement.SMAppService.mainApp）。
+    /// 失败仅记录日志，不影响 App 正常运行。
+    private func syncLaunchAtLogin() {
+        let service = SMAppService.mainApp
+        do {
+            if launchAtLogin, service.status != .enabled {
+                try service.register()
+            } else if !launchAtLogin, service.status == .enabled {
+                try service.unregister()
+            }
+        } catch {
+            NSLog("设置开机自启失败: \(error.localizedDescription)")
+        }
+    }
+
     // MARK: - 初始化（从 UserDefaults 载入，带默认值与范围约束）
 
     private init() {
         let d = UserDefaults.standard
         backgroundOverlayOpacity = d.double(forKey: Keys.backgroundOverlayOpacity).clamped(to: 0...0.8).nonZero(default: 0.10)
-        backgroundStyle         = (d.integer(forKey: Keys.backgroundStyle) == 1) ? 1 : 0
+        backgroundStyle         = d.object(forKey: Keys.backgroundStyle) != nil
+            ? ((d.integer(forKey: Keys.backgroundStyle) == 1) ? 1 : 0)
+            : 1
         columnCountOverride      = max(0, d.integer(forKey: Keys.columnCountOverride))
         rowCountOverride         = max(0, d.integer(forKey: Keys.rowCountOverride))
         iconSizeOverride         = d.double(forKey: Keys.iconSizeOverride)
@@ -164,7 +242,9 @@ final class UserPreferences: @unchecked Sendable {
         sidePadding              = d.double(forKey: Keys.sidePadding).clamped(to: 0...200)
         topPadding               = d.double(forKey: Keys.topPadding).clamped(to: 0...200)
         bottomPadding            = d.double(forKey: Keys.bottomPadding).clamped(to: 0...200)
-        multiMonitorMode         = MultiMonitorMode(rawValue: d.string(forKey: Keys.multiMonitorMode) ?? "") ?? .primaryScreen
+        // 显示目标：优先读新键；兼容旧 multiMonitorMode 的 mouse 选择
+        let legacy = d.string(forKey: Keys.multiMonitorMode)
+        displayTarget            = DisplayTarget(persistenceKey: d.string(forKey: Keys.displayTarget) ?? legacy)
         hotkeyEnabled            = d.object(forKey: Keys.hotkeyEnabled) != nil ? d.bool(forKey: Keys.hotkeyEnabled) : true
         hotkeyModifiers          = d.object(forKey: Keys.hotkeyModifiers) != nil
             ? UInt(d.integer(forKey: Keys.hotkeyModifiers))
@@ -174,6 +254,7 @@ final class UserPreferences: @unchecked Sendable {
         trackpadPagingGain       = d.object(forKey: Keys.trackpadPagingGain) != nil
             ? d.double(forKey: Keys.trackpadPagingGain).clamped(to: 1...8)
             : 4.0
+        launchAtLogin            = d.bool(forKey: Keys.launchAtLogin)
         isCapturingHotkey        = false
     }
 
@@ -200,7 +281,7 @@ final class UserPreferences: @unchecked Sendable {
         rowCountOverride = 0
         iconSizeOverride = 0
         backgroundOverlayOpacity = 0.10
-        backgroundStyle = 0
+        backgroundStyle = 1
         horizontalSpacing = 0
         verticalSpacing = 0
         sidePadding = 0
@@ -269,7 +350,8 @@ final class UserPreferences: @unchecked Sendable {
     private enum Keys {
         static let backgroundOverlayOpacity = "backgroundOverlayOpacity"
         static let backgroundStyle         = "backgroundStyle"
-        static let multiMonitorMode         = "multiMonitorMode"
+        static let multiMonitorMode         = "multiMonitorMode"   // 旧键，仅用于兼容读取
+        static let displayTarget            = "displayTarget"
         static let columnCountOverride      = "columnCountOverride"
         static let rowCountOverride         = "rowCountOverride"
         static let iconSizeOverride         = "iconSizeOverride"
@@ -283,6 +365,7 @@ final class UserPreferences: @unchecked Sendable {
         static let hotkeyKeyCode            = "hotkeyKeyCode"
         static let hotkeyKeyLabel           = "hotkeyKeyLabel"
         static let trackpadPagingGain       = "trackpadPagingGain"
+        static let launchAtLogin            = "launchAtLogin"
     }
 }
 

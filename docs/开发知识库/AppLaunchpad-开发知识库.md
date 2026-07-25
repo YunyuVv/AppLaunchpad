@@ -371,7 +371,7 @@ xcodebuild ... build
 
 - `project.yml` 固化：Manual + Apple Development + TEAM `2VU69Q9CGK`
 - **勿用 ad-hoc 签名**：designated requirement 含二进制哈希 → 重编译后 TCC 失效
-- 残留授权清理：`tccutil reset Accessibility com.applaunchpad.app` 后重授权一次
+- 残留授权清理：`tccutil reset Accessibility com.biliww.applaunchpad` 后重授权一次
 
 ### 11.4 运行应用
 

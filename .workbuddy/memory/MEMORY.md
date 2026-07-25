@@ -1,55 +1,37 @@
 # AppLaunchpad 长期记忆
 
-## 构建 / 签名 / TCC
-- 构建：`xcodebuild -project AppLaunchpad.xcodeproj -scheme AppLaunchpad -configuration Debug clean build`。**勿**带 ad-hoc 签名（令 TCC 失效）。`project.yml` 固化 Manual+Apple Development+TEAM `2VU69Q9CGK`。改 `project.yml`/新增 `.swift` 后需 `xcodegen generate`。
-- **工作流红线（用户 2026-07-25 明确）**：**改完代码必须编译确认**——`xcodebuild ... clean build`，无 error 才能交付。新增/移动 `.swift` 文件后**务必先 `xcodegen generate` 重新生成 `.xcodeproj`**，否则新建文件不在编译目标 → `Cannot find 'Xxx' in scope` 编译失败（已踩：GlassHostingView.swift 写盘后没 generate，导致 Build Failed）。
-- **macOS 26 SDK 更名**：`NSWorkspace.recycleURLs(_:completionHandler:)` 已重命名为 `recycle(_:completionHandler:)`（同一条「移到废纸篓 + 写 Put Back 元数据」路径，`FileManager.trashItem` 仍不写 Put Back）。`showWindow:` action 声明在 `NSWindowController`（非 `NSWindow`），`#selector` 须写 `NSWindowController.showWindow(_:)`。
-- TCC：Apple Development 证书只绑 identifier+CN，稳定；ad-hoc designated requirement 含二进制哈希，重编译即变→权限失效。残留授权用 `tccutil reset Accessibility com.applaunchpad.app` 清后重授权一次。
+## 构建/签名/TCC（红线）
+- 构建命令（本环境可用，已验证 BUILD SUCCEEDED）：
+  ```bash
+  defaults write com.apple.dt.Xcode DisableBuildSystemSandbox -bool YES
+  xcodebuild -project AppLaunchpad.xcodeproj -scheme AppLaunchpad -configuration Debug clean build OTHER_SWIFT_FLAGS=-disable-sandbox 2>&1 | tail -40
+  defaults delete com.apple.dt.Xcode DisableBuildSystemSandbox 2>/dev/null || true
+  ```
+  原因：本 agent 容器禁止 `sandbox_apply`（任何进程都报 `Operation not permitted`）。需两层关沙箱：① `DisableBuildSystemSandbox` 关 xcodebuild 自身 wrapper；② `OTHER_SWIFT_FLAGS=-disable-sandbox`（= swiftc `-disable-sandbox`）关宏插件宿主 `swift-plugin-server` 的沙箱——否则 `@Observable` 等外部宏报 `malformed response`。`SWIFT_USE_SANDBOX=NO` 是**错误**开关，无效。
+- 勿 ad-hoc 签名（令 TCC 失效）。`project.yml` 固化 Manual+Apple Development+TEAM `2VU69Q9CGK`。改 project.yml/新增/移动 .swift 后必 `xcodegen generate`。`project.yml` 已含 `schemes: AppLaunchpad:` 段（build/run/test/profile/analyze/archive），`xcodegen generate` 会生成共享 scheme `xcshareddata/xcschemes/AppLaunchpad.xcscheme`，命令行 `-scheme` 可用；早期版本未加此段时 xcodegen 不产出 scheme、依赖 Xcode 自动建。
+- **工作流红线（用户 2026-07-25）**：改完代码必须编译确认无 error；新增/移动 .swift 必 xcodegen generate，否则 `Cannot find 'Xxx' in scope`。
+- macOS 26 SDK 更名：`recycleURLs`→`recycle`；`showWindow:` 声明在 NSWindowController → `#selector(NSWindowController.showWindow(_:))`。
+- TCC：Apple Development 证书绑 identifier+CN 稳定。清残留：`tccutil reset Accessibility com.biliww.applaunchpad`。改 bundle id 后辅助功能授权失效，需重授权 + ⌘Q 重启；`tccutil reset` 报 -10814 = TCC 无此记录（可忽略）。⚠️ 本环境 sandbox 限制 `tccutil` 跑不了，须用户本机跑。
 
 ## 编码坑
-- Swift 6 成员初始化器不含带默认值的存储属性：`struct S{let a:Int;let b:Int=0}` → `S(a:1,b:2)` 编译失败。去默认值或显式写 `init`。
-- `NSEvent.Phase` 是 OptionSet：判「无惯性阶段」用 `event.momentumPhase.isEmpty`，非 `== .none`。
-- **App 显示名本地化坑**：读 app 中文名（`CFBundleDisplayName`）**绝不能**用 `Bundle.localizedString(forKey:table:"InfoPlist")` / `Bundle.localizedInfoDictionary` —— 当 app 的 `CFBundleDevelopmentRegion="en"` 且**无** `CFBundleLocalizations` 字段时（典型如腾讯 `wechatwebdevtools.app`），Foundation 的 `preferredLocalizations` 会错选 `["en"]` 而读不到 `zh_CN.lproj/InfoPlist.strings`（Spotlight/mdls 走不同路径能正确返回中文）。必须**手写**按 `Locale.preferredLanguages` + 实际 `*.lproj` 目录匹配的读取（地区码取 `parts.last` 而非 `parts[1]`，否则 `zh-Hans-CN` 会把 `Hans` 当地区→生成 `zh_Hans.lproj` 匹配失败）。详见 `AppScanner.localizedDisplayName`（2026-07-25）。
-- **键盘监听 + 搜索框焦点红线（2026-07-25）**：`LaunchpadWindowController.setupKeyMonitor` 里 `isTextInputFirstResponder()` 的「放行给输入框」判断**必须**同时要求 `!viewModel.searchText.isEmpty`——即只有「搜索框聚焦 **且** 确有搜索内容」才 `return event` 把按键交给输入框；否则（搜索框聚焦但空、或未聚焦）一律走正常键盘导航（左右箭头翻页、字母进搜索）。根因：`panel`/`NSHostingView` 复用不重建 → `@FocusState` 跨 hide/show 保留，残留焦点会让 `isTextInputFirstResponder()` 恒 true 而吞掉左右箭头。配套：搜索框 `@FocusState` 须上提到 `LaunchpadView`，每次 `isVisible→true` 强制 `searchFocused=false` 失焦（治本，连视觉残留也清）。AppLaunchpad 实际只有一个 TextField（搜索框），无需顾虑其他空输入框。
+- Swift 6 成员初始化器不含带默认值的存储属性；`NSEvent.Phase` 是 OptionSet 用 `.isEmpty` 判无惯性。
+- App 中文名：手写按 `Locale.preferredLanguages`+实际 .lproj 匹配（地区码取 `parts.last`），禁用 `Bundle.localizedString`/`localizedInfoDictionary`（en 开发语言+无 CFBundleLocalizations 时错选 en）。见 `AppScanner.localizedDisplayName`。
+- 键盘 monitor 焦点门控：`isTextInputFirstResponder()` 放行必须同时要求 `!searchText.isEmpty`（聚焦空+可打印字符 return event 交 IME；聚焦有内容全交还；否则字母搜索/导航）。方向键/ESC 落入导航保翻页。
+- 搜索框 `@FocusState` 上提父视图，`onChange(isVisible)` 中 `false; async true` 强制聚焦；否则 IME 分裂 + 焦点残留吞箭头。
+- macOS 26 设置窗口 Toggle 视觉小：统一 `.toggleStyle(.switch).controlSize(.large)`；行内「字段-值」用 `LabeledContent("键") { 值 }` 替代 HStack+Spacer。
 
-## 架构（模块化，同 target 不拆 framework）
-- 巨型 `LaunchpadViewModel` 拆为 `LaunchpadData`（@Observable 共享状态：layout/allApps/isVisible/currentPageIndex/searchText/isEditMode/dragState/gridGeometry/翻页/load-save/pendingAppsRefresh/totalPages）+ 4 个 @Observable Controller：`LayoutService`（几何+布局+扫描）、`SearchController`、`DragController`（边缘翻页 Timer .common，`stopEdgeScrollTimer()` 供 exitEditMode）、`NavigationController`。根 VM 组合根+薄壳转发，View 零改动。
-- 依赖单向：View→根VM→Controller/Data；Controller 之间互不引用。新增功能进对应 Controller，勿回塞根 VM。
-- `Utils/Array+Chunked.swift` 收敛重复 `chunked`。
+## 架构（同 target 不拆 framework）
+- `LaunchpadData`（@Observable 共享状态）+ 4 控制器：`LayoutService`(几何/布局/扫描)、`SearchController`、`DragController`(边缘翻页 Timer.common)、`NavigationController`。根 VM 组合根+薄壳转发；依赖单向 View→根VM→控制器。
+- 窗口：`LaunchpadWindowController` 管理 borderless `KeyablePanel`(NSPanel, canBecomeKey/Main)，`show()` 用 `UserPreferences.shared.targetScreen` 定位到指定显示器。设置窗 `Window("设置",id:"settings")`+NavigationSplitView；经 AppDelegate.openSettings→settingsOpener→openWindow(id:)（勿 showWindow:）。
+- 显示器选择：`UserPreferences.DisplayTarget`(primary/mouse/specific(CGDirectDisplayID)) → `targetScreen` 解析 NSScreen；`DisplayPane` 枚举 `NSScreen.screens` 列出可选，单显时仅显示"主显示器"不可选。
 
-## 文件夹功能（2026-07-25 已彻底清理完成）
-- **完全移除**：`FolderController.swift` / `Views/FolderThumbnailView.swift` / `Views/FolderExpandedView.swift` 三个文件 + `LayoutData.folders` 运行时永远空 + `DragState.draggedFolderID/hoverTargetFolderID` 字段保留作数据兼容 + `LayoutItem.folder` enum case 保留作兼容（`GridPageView.case .folder: Color.clear` 兜底）。
-- **运行时**：`LayoutService.mergeLayout` 把 .folder 槽位按 `saved.folders` 字典展开为内部 .app（按 appIDs 顺序，已卸载静默丢弃）→ `folders: [:]` 强制置空。**layout.json 一旦被 mergeLayout 处理过，pages 里 0 个 .folder**。
-- **历史污染**：早期版本写出的 layout.json 含 `[key, dict, key, dict]` 异常格式的 `folders` 字段（Swift JSONDecoder 容错解码为 dict）+ pages 里散落 .folder 槽位。**Python 迁移脚本**：备份 `.folderclean.bak` → 解析 folders（支持 list-of-pairs）→ 展开 .folder 为 .app → folders 置空 → 写回。
-- **未来恢复**（如需）：重建上述 3 个文件 + `DragController` 加回 `folderController` 依赖 + `LaunchpadView` 加回 `expandedFolderID`/overlay/4 处 `onTapFolder`/floatingDragIcon folder 分支 + `LayoutService.mergeLayout` 改回保留 folders + `endDrag` 加回"创建文件夹/添加到文件夹"分支即可。数据格式与持久化层无需动。
-
-## 拖拽 clamp（2026-07-25 红线）
-- **`pageItemsWithDrag` / `endDrag` clamp 一律用 `items.count`（= remove 后的 count）**，**绝不**用 `itemsPerPage - 1` —— 满页时结果一样；**不满页时** `itemsPerPage - 1` 远大于 count → `items.insert(at: 越界值)` 崩溃（thread 1 Array index out of range）。`min(max(to, 0), items.count)` 满/不满统一：满页时 = itemsPerPage-1 = 视觉最后一格；不满页时 = 末尾 append（to 越界时等价 append 合法）。
-- 跨页拖拽 `sourcePage != dstPage` 时必须 `dstItems.removeAll` 同名 .app（避免历史 bug 留下的副本被插入变成两份）。同页不需要（src 已被 `srcItems.remove` 移走）。
-- 拖拽手势状态必须放 `@State` / `@GestureState`，绝不可放计算属性闭包的 `var`（@Observable 拖拽中频繁重算 body → 手势每次重建 → 闭包局部变量重置 → onEnded 跑在新实例上 guard 失败 → endDrag 未执行 → app 弹回 + isDragging 卡死）。
-- 用户截图里的崩溃 PID（如 56719）实际**未真崩**——Xcode debug session 状态 ≠ app 进程退出，验证 app 健康应 `kill -0 $PID`（PID 56719 一直存活）。
-
-## 拖拽落点几何化（关键）
-- 纯几何 `GridGeometry`（origin/cols/rows/cellW/cellH/spacing/iconSize）：落点 `slotUnderCursor` 由光标坐标 `row*cols+col` 推导；`iconRect(forSlot:)` 得图标 footprint 区分「压图标」vs「间隙」。`LaunchpadView.pagingView` 用 `GeometryReader` 写 `viewModel.gridGeometry`（标 `@ObservationIgnored` 防死循环）。
-- `DragState.cursorSlot` 驱动 make-way 弹簧（来自固定几何、不漂移）。`appAtIconPoint`(起手/翻页)、`slotUnderCursor`(落点) 取代 measured frame/`nearestSlot`。
-- **预览与落点统一 `insert at to`**（`to`=光标几何槽位）。
-- 手势宿主在 `LaunchpadView` 根 `ZStack`（`.simultaneousGesture(globalDragGesture+pagingDragGesture)`）；勿挂回单个 app 或 `GridPageView`（items 变→手势取消→跨页卡死）。
-- **make-way 常驻、不弹回**：`DragController.pageItemsWithDrag` 不再因任何 target 标记返回原始排列。被拖图标从源位移到 `cursorSlot`（同页），其余 app 让位推开不弹回；仅 `cursorSlot` 变化（被拖 app 拖离）时其它 app 才归位。`endDrag` 一律按 `cursorSlot` 重排。
-- **拖拽中禁止重建 layout.pages**：`LayoutService.refreshApps` 在 `data.dragState.isDragging` 时置 `data.pendingAppsRefresh` 并 `return`，不重建 `pages`（否则 `sourceSlotIndex`/`cursorSlot` 失效→落点错乱/被冲掉）。`DragController` 注入 `layoutService` 依赖，`endDrag` 复位 `dragState` 后若 `pendingAppsRefresh` 则补 `Task{await layoutService.refreshApps()}`，保留刚排好顺序。`LaunchpadData.pendingAppsRefresh` 标 `@ObservationIgnored`。
-- **松手落点必须用松手瞬间精确坐标**：`globalDragGesture.onEnded` 先 `updateDragTarget(location: value.location)` 再 `endDrag()`；`endDrag` 重排分支再以 `geo.slotUnderCursor(dragState.dragLocation)` 兜底重算 `to`。原因：SwiftUI `onEnded` 不保证松手前再发一次 `onChanged`，最后一段位移会让 `cursorSlot` 落后一格→"落不到正位/有点偏离"。
-- **松手 transition 残影**：①根视图加 `.animation(.interactiveSpring(response: 0.35, dampingFraction: 0.82), value: dragState.isDragging)` 让松手时 transition 与让位回位用同一段 spring 驱动；②`globalDragGesture.onEnded` 用 `withAnimation(.interactiveSpring(...))` 包裹 `viewModel.endDrag()`；③`GridPageView.body` 的 `.animation(_, value: items)` 让让位布局与最终布局顺序一致 = insert at to，松手瞬间 items 数组不变 → spring 不触发 → 无残影。
-- **`GridPageView.iconCell` 每个格子必须固定为 `cellW × cellH`**：否则视觉格点与 `gridGeometry` 错位 → 布局乱 / 不全屏 / 拖拽落点对不上。
-
-## 设置窗口
-- `Window("设置",id:"settings")`+`NavigationSplitView`+`.listStyle(.sidebar)`；入口经 `AppDelegate.openSettings()`→`settingsOpener`→`openWindow(id:)`（**绝不用 `showWindow:`**，Dock 菜单下失效）。打开降面板层级、关闭恢复。
-- 外观参数全进 `UserPreferences`（存储属性+didSet 写 UserDefaults，勿写计算属性否则 @Observable 失效）；`0=自动`。透明度默认 0.10。
-
-## 搜索框焦点 / 拼音 IME（2026-07-25 红线）
-- **搜索框必须在 `show()` 时聚焦**（与原生 Launchpad 一致）：`LaunchpadView` `onChange(of: isVisible)` 里 `searchFocused = false; DispatchQueue.main.async { searchFocused = true }`（先 false 再 async true，确保 panel/NSHostingView 复用不重建时 SwiftUI @FocusState 真正重新聚焦）。**不聚焦 → 拼音 IME 必分裂**（首字母被键盘 monitor 截走、其余拼音被 IME 写回输入框 → "h 一个、aima 一个"）。
-- **键盘 monitor 焦点门控不变量（`LaunchpadWindowController.setupKeyMonitor`）**：搜索框聚焦且**空**时，可打印字符（含拼音首字母）**必须 `return event` 交还输入框**，绝不可自行 `searchText += chars`（否则首字母被 monitor 截走、其余被 IME 写回 → 分裂）；聚焦且有内容时全部 `return event`（光标/删除/IME 交给输入框）；**未聚焦**才走字母搜索追加逻辑。方向键/ESC/Return 在非可打印分支仍落入下方导航逻辑 → 翻页/退出不被吞（上一轮「箭头被吞」bug 仍有保障）。
-- **切勿**为修别的 bug 把 `show()` 聚焦改回 `searchFocused = false`（上轮回归即此引起）。要同时保 IME 不分裂 + 翻页不被吞，只能靠上面两条组合，不能靠「失焦」。
+## 已落地功能（摘要）
+- 文件夹功能 2026-07-25 已彻底移除（3 文件+folders 字段强制空）。
+- 背景：磨砂（`.behindWindow` ScreenBlurView）/ 液态玻璃（`NSGlassEffectView`）二选一，**默认玻璃**（backgroundStyle 默认 1）。文件夹面板 `FolderBackdropView` 跟随：玻璃 NSGlassEffectView、磨砂 `.withinWindow` 毛玻璃。
+- 右键菜单：打开/在访达中显示/删除（二次确认 `.confirmationDialog`）。删除用 `NSWorkspace.shared.recycle` 保留 Put Back 元数据（禁用 FileManager.trashItem）。
+- 拖拽 clamp 用 items.count，落点几何化（GridGeometry 固定几何），make-way 常驻。
 
 ## 数据/其他
-- 布局：`LayoutStore`(actor)+JSON 原子写 `~/Library/Application Support/AppLaunchpad/layout.json`（全量快照 `LayoutData`：分页 `[[LayoutItem]]`+`folders`，**folders 字段运行时永远为空**，仅作兼容字段保留）。偏好：`UserPreferences`→UserDefaults。App 信息不持久化。
-- 退出：后台常驻（状态栏+全局热键+NSPanel）。设置窗红叉只关窗不退出（`defaultLaunchBehavior(.suppressed)`+`applicationShouldTerminateAfterLastWindowClosed`→false）。退出仅 ⌘Q/状态栏；Dock 左键→`applicationShouldHandleReopen→toggle()`。
-- 键盘吞字：`LaunchpadWindowController.keyDown` 追加 searchText 前先 `isTextInputFirstResponder()` 放行。
+- 布局：`LayoutStore`(actor)+JSON `~/Library/Application Support/AppLaunchpad/layout.json`（`folders` 字段运行时恒空）。偏好 `UserPreferences`→UserDefaults.standard（按 bundle id 分域，改 id 历史设置重置）。
+- 退出：后台常驻（状态栏+全局热键+NSPanel）；设置窗红叉只关窗不退出；退出仅 ⌘Q/状态栏；Dock 左键→toggle。
+- bundle id：`com.applaunchpad.app` → `com.biliww.applaunchpad`（project.yml: bundleIdPrefix=com.biliww + PRODUCT_BUNDLE_IDENTIFIER=com.biliww.applaunchpad）。

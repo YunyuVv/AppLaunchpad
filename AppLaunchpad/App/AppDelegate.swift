@@ -161,7 +161,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func setupStatusItem() {
         let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
-        item.button?.image = NSImage(systemSymbolName: "square.grid.3x3.fill", accessibilityDescription: "AppLaunchpad")
+        // 菜单栏图标使用本项目 App 图标（彩色），适配菜单栏高度约 18pt；取不到时回退系统符号
+        if let appIcon = NSImage(named: "AppIcon") {
+            appIcon.size = NSSize(width: 18, height: 18)
+            appIcon.isTemplate = false
+            item.button?.image = appIcon
+        } else {
+            item.button?.image = NSImage(systemSymbolName: "square.grid.3x3.fill", accessibilityDescription: "AppLaunchpad")
+        }
 
         let menu = NSMenu()
         menu.addItem(withTitle: "打开启动台", action: #selector(toggle), keyEquivalent: "").target = self
