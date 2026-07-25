@@ -99,20 +99,28 @@ jobs:
           path: build/AppLaunchpad.dmg
           if-no-files-found: error
 
-      # 仅当推送了 v* 标签时，自动创建 GitHub Release 并附上 DMG
-      - name: Create GitHub Release (on tag)
+      # 仅当推送了 v* 标签时，自动创建/更新 GitHub Release 并附上 DMG。
+      # 幂等：若 Release 已由 `gh release create` 预先创建（如用户手动发版），
+      # 则仅把 DMG 资产上传/覆盖到该 Release，避免「release 已存在」冲突。
+      - name: Create / Update GitHub Release (on tag)
         if: startsWith(github.ref, 'refs/tags/v')
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           TAG="${GITHUB_REF_NAME}"
-          gh release create "$TAG" "$DMG_PATH" \
-            --title "$TAG" \
-            --notes "未签名 DMG（开源技术人分发版）。
+          NOTES="未签名 DMG（开源技术人分发版）。
 
           下载后请执行：
-          ```bash
+          \`\`\`bash
           sudo xattr -r -d com.apple.quarantine /Applications/AppLaunchpad.app
-          ```
+          \`\`\`
           然后右键 AppLaunchpad.app → 打开 → 点「仍要打开」；
           首次启动后到 系统设置 → 隐私与安全性 → 辅助功能 中打开 AppLaunchpad（全局快捷键 ⌥+Space 必需）。"
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "Release $TAG 已存在，追加/覆盖 DMG 资产"
+            gh release upload "$TAG" "$DMG_PATH" --clobber
+          else
+            gh release create "$TAG" "$DMG_PATH" \
+              --title "$TAG" \
+              --notes "$NOTES"
+          fi
