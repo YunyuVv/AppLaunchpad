@@ -124,6 +124,33 @@ final class LaunchpadViewModel {
     }
     func renameFolder(_ folderID: UUID, to name: String) { folderController.renameFolder(folderID, to: name) }
 
+    /// 右键菜单「删除」：把 .app 移入废纸篓（与原生「卸载」一致），随后重扫刷新布局。
+    /// 系统受保护 app 由调用方（AppIconView）决定不显示此项；此处失败（权限/SIP）静默忽略，
+    /// 保持与原生一致的「点击即生效、可自废纸篓恢复」体验。
+    ///
+    /// 注意：必须用 `NSWorkspace.performFileOperation(.recycleOperation, …)` 而非
+    /// `FileManager.trashItem(at:)` —— 后者是 Foundation 底层 API，只把文件挪到 ~/.Trash，
+    /// **不写「原始路径」元数据**，导致废纸篓里右键没有「放回原处」(Put Back)。
+    /// 前者与 Finder 拖拽进废纸篓走同一代码路径，会正确记录原始位置，Put Back 才可用。
+    func deleteApp(_ app: AppInfo) {
+        Task {
+            let source = app.url.deletingLastPathComponent().path
+            let name = app.url.lastPathComponent
+            var tag: Int = 0
+            let ok = NSWorkspace.shared.performFileOperation(
+                .recycleOperation,
+                source: source,
+                destination: "",
+                files: [name],
+                tag: &tag
+            )
+            if !ok {
+                // 权限不足或 SIP 保护的 app 卸载失败：忽略（菜单项本就不会对其展示）
+            }
+            await layoutService.refreshApps()
+        }
+    }
+
     // MARK: - 搜索（→ SearchController 已通过属性转发；导航走 NavigationController）
 
     // MARK: - 键盘导航（→ NavigationController）

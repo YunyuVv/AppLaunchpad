@@ -125,7 +125,7 @@ struct FolderExpandedView: View {
                 // 浮动图标
                 if let app = draggedApp {
                     AppIconView(app: app, iconSize: iconSize, isEditMode: false,
-                                onTap: {}, onLongPress: {}, onDelete: nil)
+                                onTap: {}, onLongPress: {})
                         .scaleEffect(1.12)
                         .shadow(color: .black.opacity(0.35), radius: 12, x: 0, y: 6)
                         .allowsHitTesting(false)
@@ -231,8 +231,7 @@ struct FolderExpandedView: View {
                             let isFirst = rowIdx == 0 && rows[rowIdx].first?.bundleID == app.bundleID
                             AppIconView(app: app, iconSize: iconSize, isEditMode: false,
                                         onTap: { onLaunch(app) },
-                                        onLongPress: {},
-                                        onDelete: nil)
+                                        onLongPress: {})
                                 .opacity(isDragged ? 0.0 : 1.0)
                                 .background(
                                     // 仅首格：测量其全局 frame，供纯几何落点（替代逐格 cellFrames 命中测试）

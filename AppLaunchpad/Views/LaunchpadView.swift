@@ -535,8 +535,7 @@ struct LaunchpadView: View {
                     iconSize: iconSize,
                     isEditMode: false,
                     onTap: {},
-                    onLongPress: {},
-                    onDelete: nil
+                    onLongPress: {}
                 )
                 .scaleEffect(1.12)
                 .shadow(color: .black.opacity(0.35), radius: 12, x: 0, y: 6)

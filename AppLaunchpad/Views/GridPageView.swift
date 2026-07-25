@@ -81,7 +81,7 @@ struct GridPageView: View {
                         isEditMode: isEditMode,
                         onTap: { onTapApp(app) },
                         onLongPress: onLongPress,
-                        onDelete: nil
+                        onDeleteApp: { viewModel.deleteApp(app) }
                     )
                     .scaleEffect(isHoverTarget ? 1.15 : (isSelected ? 1.06 : 1.0))
                     .opacity(isDragged ? 0.0 : 1.0)

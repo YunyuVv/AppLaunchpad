@@ -47,13 +47,13 @@ macOS 原生「启动台（Launchpad）」在 **app 图标**上提供一整套�
 | N3 拖拽重排            | ✅ 已实现           | `DragController` make-way 几何落点（纯 `GridGeometry.slotUnderCursor`）   |
 | N4 拖拽建文件夹          | ❌ 已移除           | 主网格 `folderHoverID`/建文件夹手势已移除；`FolderController` 仅服务文件夹展开视图        |
 | N5 拖入/拖出文件夹        | ❌ 已移除           | 同上                                                                 |
-| N6 删除 X            | △ 部分            | **仅文件夹展开视图**内传 `onDelete` 显示 X；**主网格无 X**；且未区分 App Store           |
-| N7 右键-打开           | ❌ 无             | 当前 `.contextMenu` 仅挂在背景层（`关闭启动台`/`完成编辑`），**无 app 级右键菜单**           |
-| N8 右键-在 Finder 中显示 | ❌ 无             | —                                                                  |
-| N9 右键-添加到程序坞       | ❌ 无             | —                                                                  |
+| N6 删除              | ✅ 已实现（调整）     | 用户确认编辑模式 X 不好看 → **改为右键菜单「删除」项**（非 X）；含二次确认 + 放回原处（见 R4） |
+| N7 右键-打开           | ✅ 已实现           | `AppIconView` `.contextMenu` → `NSWorkspace.open(url)`                       |
+| N8 右键-在 Finder 中显示 | ✅ 已实现           | `.contextMenu` → `activateFileViewerSelecting([url])`                        |
+| N9 右键-添加到程序坞       | ❌ 无             | 本次未实现（保留为后续需求，见 R3 状态）                                          |
 | N10 拖到程序坞          | ❌ 无             | —                                                                  |
 
-**结论**：单击启动、编辑模式、拖拽重排已齐备；**右键上下文菜单三件套（N7/N8/N9）与「主网格删除 X（N6）」是主要缺口**，且正是用户关注的「右边 app 操作」。
+**结论**：单击启动、编辑模式、拖拽重排已齐备；**右键菜单「打开 / 在 Finder 中显示 / 删除」已实现**（N7/N8 + 调整的 N6），其中「删除」含二次确认并支持废纸篓「放回原处」；原生 N9「添加到程序坞」与编辑模式 X 未实现（用户选择右键删除替代 X）。
 
 ---
 
@@ -62,10 +62,11 @@ macOS 原生「启动台（Launchpad）」在 **app 图标**上提供一整套�
 ### R1 — App 图标右键上下文菜单（P0）
 
 - **描述**：在任意 app 图标上右键 / 双指轻点 / Control-单击，弹出 NSMenu。
-- **菜单项**：
+- **菜单项（实际落地）**：
   - `打开`（→ `viewModel.launch(app)`）
   - `在 Finder 中显示`（→ R2）
-  - `添加到程序坞`（→ R3）
+  - `删除`（→ R4，移入废纸篓 + 二次确认 + 支持「放回原处」）
+  - > 注：原生 R3「添加到程序坞」本次**未实现**（见 R3 状态），菜单按用户决策以「删除」替代「添加到程序坞」入列。
 - **触发规则**：
   - 右键（secondary click）**直接弹菜单**，**不进入编辑模式**（与原生一致）。
   - 与现有背景层 `.contextMenu`（关闭启动台）共存：app 图标上的右键由 `AppIconView` 的 `.contextMenu` 优先消费，背景层菜单作兜底。
@@ -87,16 +88,22 @@ macOS 原生「启动台（Launchpad）」在 **app 图标**上提供一整套�
   - `defaults write` 后 `killall Dock` 刷新（放异步 `Task`，避免阻塞 UI）。
   - 备选：AppleScript `tell application "Dock" to make new ...`；plist 直写更可控。
 - **验收**：右键「添加到程序坞」后 Dock 出现该 app 图标；重复添加应去重（按 path 判重）。
+- **状态**：⚠️ **未实现**。用户聚焦「在 Finder 中显示 / 删除」，未要求 Dock 集成；删除项已替代「添加到程序坞」进入右键菜单（见 R1/R4）。保留为后续需求。
 
-### R4 — 主网格删除 X + 仅 App Store 可见（P1）
+### R4 — App 删除（右键菜单「删除」项 + 二次确认 + 放回原处 / Put Back）（P1，已落地）
 
-- **描述**：编辑模式下，主网格 app 图标左上角显示删除 X；**仅 `app.isMASApp == true`（App Store 应用）显示 X**，系统/非商店 app 不显示（对齐原生 N6）。
-- **实现**：
-  - `AppIconView` 主网格调用新增 `onDelete` 回调（当前主网格传 `nil`）。
-  - `onDelete` 行为：把 `.app` 移到 `~/.Trash`（等效原生卸载），随后触发 `LayoutService.refreshApps()` 重扫。
-  - 删除前建议确认（原生无确认；本项目可加 `NSAlert` 二选一，待定）。
-- **依赖**：`AppInfo.isMASApp` 已由 `AppScanner` 通过 `_MASReceipt` 判定（见 `AppScanner.swift:78`）。
-- **验收**：编辑模式下 App Store app 显示 X、点击卸载并移出启动台；系统 app（如 Safari/访达）不显示 X。
+- **入口调整（对齐用户决策）**：用户确认编辑模式抖动 X「不好看」，**不采用原生编辑模式 X**，改为在 app 图标**右键菜单中加入「删除」项**（与原生右键「打开 / 在 Finder 中显示」并列）。触发后动作与原生卸载一致：把 `.app` 移入废纸篓。
+- **二次确认**：点「删除」先弹 `.confirmationDialog("确定把"<displayName>"移到废纸篓？", …)`，确认按钮（`role: .destructive`）才执行删除，取消（`role: .cancel`）不删。避免误删（原生无确认，本项目加此道保险）。
+- **放回原处（Put Back）支持（关键）**：
+  - 废纸篓里右键「放回原处」依赖文件被移入时记录的**原始路径元数据**。
+  - 实现**必须**用 `NSWorkspace.shared.performFileOperation(.recycleOperation, source: 父目录路径, destination: "", files: [app名], tag:)`——与 Finder 把文件拖进废纸篓走同一条代码路径，会自动写原始路径元数据，Put Back 才可用。
+  - **禁用** `FileManager.default.trashItem(at:)`：该 Foundation 底层 API 只把文件挪到 `~/.Trash`，**不写 Put Back 元数据** → 废纸篓右键无「放回原处」（早期实现踩过此坑，已改为 `NSWorkspace` 路径）。
+- **安全范围**：`/System/` 下受 SIP 保护的系统 app 不显示「删除」项（原生也无卸载入口）；其余 app 删除失败（权限/SIP）静默忽略。
+- **实现**：`LaunchpadViewModel.deleteApp(_:)` → `NSWorkspace.performFileOperation(.recycleOperation, …)` → 随后 `await layoutService.refreshApps()`，`mergeLayout` 自动剔除已卸载的 app。
+- **验收**：
+  - 右键「删除」弹二次确认 → 确认后 app 移入废纸篓、启动台图标消失；取消则不删。
+  - 在废纸篓里右键该 app **出现「放回原处」**，可还原到原 `/Applications` 位置。
+  - `/System` 下系统 app 右键无「删除」项。
 
 ### R5 — 拖拽到程序坞（P2，可选）
 
@@ -123,9 +130,10 @@ macOS 原生「启动台（Launchpad）」在 **app 图标**上提供一整套�
 
 ## 六、验收标准（汇总）
 
-- [ ] 右键 app 弹出「打开 / 在 Finder 中显示 / 添加到程序坞」三项（R1+R2+R3）
-- [ ] 三项均执行正确、Dock 刷新生效、无重复添加（R3）
-- [ ] 主网格编辑模式：App Store app 显示删除 X，点击卸载移出；系统 app 无 X（R4）
+- [ ] 右键 app 弹出「打开 / 在 Finder 中显示 / 删除」三项（R1+R2+R4；R3 添加到程序坞未实现）
+- [ ] 「删除」弹二次确认 → 确认后移入废纸篓、启动台图标消失（R4）
+- [ ] 废纸篓里该 app 右键**出现「放回原处」**，可还原到原 `/Applications` 位置（R4 · Put Back）
+- [ ] `/System` 下系统 app 右键无「删除」项（R4）
 - [ ] 右键不进入编辑模式、不与长按进编辑冲突（R1）
 - [ ] 现有单击启动 / 长按编辑 / 拖拽重排 / 翻页体验不被回归
 
@@ -135,8 +143,8 @@ macOS 原生「启动台（Launchpad）」在 **app 图标**上提供一整套�
 
 | 优先级    | 需求           | 说明                                      |
 | ------ | ------------ | --------------------------------------- |
-| **P0** | R1 + R2 + R3 | 右键菜单三件套——用户明确关注的「右边 app 操作」，最贴近原生，工作量适中 |
-| **P1** | R4           | 主网格删除 X + App Store 判定，补齐编辑模式能力         |
+| **P0** | R1 + R2 + R4 | 右键菜单：打开 / 在 Finder 中显示 / 删除（删除含二次确认 + 放回原处）。R3 添加到程序坞未实现、延后 |
+| **P1** | R4（删除）     | 右键「删除」项 + 二次确认 + 放回原处（Put Back），替代原生编辑模式 X               |
 | **P2** | R5 / R6      | 拖到 Dock / 恢复文件夹，可选，待用户确认                |
 
 

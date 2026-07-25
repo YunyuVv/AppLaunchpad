@@ -8,24 +8,26 @@ struct AppIconView: View {
     let isEditMode: Bool
     let onTap: () -> Void
     let onLongPress: () -> Void
-    /// 删除回调（可选）。启动台网格不传（不显示 X）；文件夹展开视图传入以移除文件夹内 app。
-    let onDelete: (() -> Void)?
+    /// 右键菜单「删除」回调：触发后把 .app 移入废纸篓（与原生「卸载」一致）。
+    /// 主网格传入（viewModel.deleteApp）；文件夹内部 app 等场景传 nil，则不显示「删除」。
+    let onDeleteApp: (() -> Void)?
 
     @State private var icon: NSImage?
     @State private var isHovering: Bool = false
     @State private var isPressed: Bool = false
+    @State private var showDeleteConfirm: Bool = false
 
     // 自定义 init：构造时同步从缓存取图标（翻页重建时命中缓存，避免灰色占位闪烁）。
     // 注意：@State 初值不能在属性初始值里引用 app，必须在 init 中用 _icon = State(initialValue:) 设置。
     init(app: AppInfo, iconSize: CGFloat, isEditMode: Bool,
          onTap: @escaping () -> Void, onLongPress: @escaping () -> Void,
-         onDelete: (() -> Void)? = nil) {
+         onDeleteApp: (() -> Void)? = nil) {
         self.app = app
         self.iconSize = iconSize
         self.isEditMode = isEditMode
         self.onTap = onTap
         self.onLongPress = onLongPress
-        self.onDelete = onDelete
+        self.onDeleteApp = onDeleteApp
         _icon = State(initialValue: IconCache.cachedIcon(for: app))
     }
 
@@ -70,20 +72,44 @@ struct AppIconView: View {
             }
             .animation(.easeIn(duration: 0.15), value: icon != nil)
             .animation(.spring(duration: 0.2), value: isEditMode)
-
-            // 删除按钮（仅当传入 onDelete 时显示，例如文件夹展开视图移除 app）
-            if isEditMode, let onDelete {
-                Button(action: onDelete) {
-                    Image(systemName: "xmark.circle.fill")
-                        .foregroundStyle(.white, .black.opacity(0.7))
-                        .font(.system(size: max(16, iconSize * 0.22)))
-                }
-                .buttonStyle(.plain)
-                .offset(x: -4, y: -4)
-                .transition(.scale.combined(with: .opacity))
-            }
         }
         .animation(.spring(duration: 0.2), value: isEditMode)
+        // 右键菜单：打开 / 在访达中显示 / 删除（删除动作与原生一致，把 .app 移入废纸篓）。
+        // secondary click 由 .contextMenu 识别，与 primary 长按进编辑模式互不冲突。
+        .contextMenu {
+            Button {
+                NSWorkspace.shared.open(app.url)
+            } label: {
+                Label("打开", systemImage: "arrow.up.right.square")
+            }
+            Button {
+                NSWorkspace.shared.activateFileViewerSelecting([app.url])
+            } label: {
+                Label("在访达中显示", systemImage: "folder")
+            }
+            // 系统受保护 app（/System 下）无法卸载，不显示「删除」，与原生一致。
+            if !app.url.path.hasPrefix("/System/") {
+                Divider()
+                Button(role: .destructive) {
+                    showDeleteConfirm = true
+                } label: {
+                    Label("删除", systemImage: "trash")
+                }
+            }
+        }
+        // 二次确认：点「删除」后弹窗，确认才真正把 .app 移入废纸篓（动作仍与原生一致）。
+        .confirmationDialog(
+            "确定把“\(app.displayName)”移到废纸篓？",
+            isPresented: $showDeleteConfirm,
+            titleVisibility: .visible
+        ) {
+            Button("移到废纸篓", role: .destructive) {
+                onDeleteApp?()
+            }
+            Button("取消", role: .cancel) {}
+        } message: {
+            Text("此操作会将应用移入废纸篓，可在废纸篓中恢复。")
+        }
     }
 
     @ViewBuilder
