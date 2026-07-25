@@ -35,3 +35,12 @@
 - 布局：`LayoutStore`(actor)+JSON `~/Library/Application Support/AppLaunchpad/layout.json`（`folders` 字段运行时恒空）。偏好 `UserPreferences`→UserDefaults.standard（按 bundle id 分域，改 id 历史设置重置）。
 - 退出：后台常驻（状态栏+全局热键+NSPanel）；设置窗红叉只关窗不退出；退出仅 ⌘Q/状态栏；Dock 左键→toggle。
 - bundle id：`com.applaunchpad.app` → `com.biliww.applaunchpad`（project.yml: bundleIdPrefix=com.biliww + PRODUCT_BUNDLE_IDENTIFIER=com.biliww.applaunchpad）。
+
+## 暂缓 / 已知难点
+- **设置窗口浮于启动台上方 + 背景虚化（2026-07-25 回滚，未做）**：启动台面板 `level = screenSaverWindow-1`（极高，盖 Dock/菜单栏/一切）。多方案尝试均判"不行"，用户回滚保留最早"降面板 hack"基线（`AppDelegate` 监听全局 `didBecomeKey`→`lowerPanelForSettings()` 把面板降到 `.normal`，关闭再 `restorePanelLevel()` 升回）。沉淀坑（勿重复踩）：
+  ① 跨窗口层级时序竞态（先降启动台再开设置，becomeKey 之前压不住）；
+  ② macOS SwiftUI `.contextMenu` 与同视图 `.simultaneousGesture(DragGesture)` 冲突→右键菜单弹不出（绕过：用 `NSView` `hitTest` 只拦右键/control+左键、左键拖拽透传）；
+  ③ `Window(id:)` 场景被关闭后 `openWindow(id:)` 重开不可靠（SwiftUI 已知 bug）→ 改手动托管 `NSWindow`（`isReleasedWhenClosed=false`, `orderFront`）可解重开，但方案整体被否；
+  ④ `NSViewRepresentable` 的 `.background` 子视图 `makeNSView` 时 `view.window == nil` → 想在那设 `window.level` 拿不到窗口（须改 `updateNSView` 等挂载后再设）；
+  ⑤ 设置窗口打开时启动台键盘 monitor 仍在跑 → ESC 误关启动台/字母误入搜索，须 monitor 顶部 `guard panel?.isKeyWindow == true`。
+  取舍：独立不透明窗口浮层→虚化只在窗口四周边缘外可见（非整屏虚化）；overlay 浮层需丢系统标题栏（样式变化）。若未来重做，要么接受样式变化（overlay 进 `LaunchpadView` ZStack + `FolderBackdropView` 虚化），要么手动托管半透明窗口。

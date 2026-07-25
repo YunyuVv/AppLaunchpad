@@ -22,7 +22,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         setupStatusItem()
         setupGlobalHotkey()
-        setupWindowObservers()
 
         Task {
             await vm.loadApps()
@@ -77,45 +76,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// 显式返回 false，确保"保持常驻"——退出仅通过 ⌘Q / 状态栏菜单。
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
         false
-    }
-
-    // MARK: - 窗口层级观察（让 SwiftUI Settings 场景的设置窗口能浮在全屏面板之上）
-
-    private func setupWindowObservers() {
-        NotificationCenter.default.addObserver(
-            self,
-            selector: #selector(windowDidBecomeKey(_:)),
-            name: NSWindow.didBecomeKeyNotification,
-            object: nil
-        )
-        NotificationCenter.default.addObserver(
-            self,
-            selector: #selector(windowWillClose(_:)),
-            name: NSWindow.willCloseNotification,
-            object: nil
-        )
-    }
-
-    /// 当面板可见时，任何非面板窗口成为 key（例如原生 Settings 窗口），都要把面板降到普通层级，
-    /// 否则高层级面板会把设置窗口挡在背后看不见。
-    @objc private func windowDidBecomeKey(_ notification: Notification) {
-        guard let window = notification.object as? NSWindow,
-              let wc = windowController,
-              window != wc.hostWindow,
-              wc.isVisible,
-              !wc.isPanelLowered else { return }
-        wc.lowerPanelForSettings()
-        window.makeKeyAndOrderFront(nil)
-    }
-
-    /// 非面板窗口关闭后，把面板恢复回 screenSaver-1 层级，继续当启动台用。
-    @objc private func windowWillClose(_ notification: Notification) {
-        guard let window = notification.object as? NSWindow,
-              let wc = windowController,
-              window != wc.hostWindow,
-              wc.isPanelLowered,
-              wc.isVisible else { return }
-        wc.restorePanelLevel()
     }
 
     // MARK: - FSEvents
