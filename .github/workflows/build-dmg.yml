@@ -78,6 +78,7 @@ jobs:
       - name: Package DMG
         run: |
           DMG_NAME="AppLaunchpad"
+          DMG_PATH="$PWD/build/${DMG_NAME}.dmg"   # 本步骤内使用的本地变量
           STAGING="$PWD/build/dmg_staging"
           rm -rf "$STAGING"
           mkdir -p "$STAGING"
@@ -86,8 +87,8 @@ jobs:
           hdiutil create -volname "$DMG_NAME" \
             -srcfolder "$STAGING" \
             -ov -format UDZO \
-            "$PWD/build/${DMG_NAME}.dmg"
-          echo "DMG_PATH=$PWD/build/${DMG_NAME}.dmg" >> "$GITHUB_ENV"
+            "$DMG_PATH"
+          echo "DMG_PATH=$DMG_PATH" >> "$GITHUB_ENV"   # 供后续 Release 步骤使用（GITHUB_ENV 仅对下一步生效）
           hdiutil verify "$DMG_PATH"
           du -h "$DMG_PATH"
 
