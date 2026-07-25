@@ -51,6 +51,7 @@ struct FolderExpandedView: View {
     /// 编辑中的草稿名
     @State private var draftName: String = ""
     @FocusState private var renameFocused: Bool
+    @Environment(\.colorScheme) private var colorScheme
 
     init(folder: FolderInfo, apps: [AppInfo], iconSize: CGFloat,
          onDismiss: @escaping () -> Void, onLaunch: @escaping (AppInfo) -> Void,
@@ -196,7 +197,7 @@ struct FolderExpandedView: View {
                 TextField("文件夹名称", text: $draftName)
                     .textFieldStyle(.plain)
                     .font(.system(size: 18, weight: .semibold))
-                    .foregroundStyle(.white)
+                    .foregroundStyle(colorScheme == .dark ? .white : .black)
                     .multilineTextAlignment(.center)
                     .frame(width: maxW)
                     .focused($renameFocused)
@@ -214,7 +215,7 @@ struct FolderExpandedView: View {
                 } label: {
                     Text(displayName)
                         .font(.system(size: 18, weight: .semibold))
-                        .foregroundStyle(.white)
+                        .foregroundStyle(colorScheme == .dark ? .white : .black)
                         .frame(maxWidth: .infinity)
                 }
                 .buttonStyle(.plain)

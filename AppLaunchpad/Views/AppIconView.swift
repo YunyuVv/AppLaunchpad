@@ -16,6 +16,7 @@ struct AppIconView: View {
     @State private var isHovering: Bool = false
     @State private var isPressed: Bool = false
     @State private var showDeleteConfirm: Bool = false
+    @Environment(\.colorScheme) private var colorScheme
 
     // 自定义 init：构造时同步从缓存取图标（翻页重建时命中缓存，避免灰色占位闪烁）。
     // 注意：@State 初值不能在属性初始值里引用 app，必须在 init 中用 _icon = State(initialValue:) 设置。
@@ -45,10 +46,12 @@ struct AppIconView: View {
 
                     Text(app.displayName)
                         .font(.system(size: min(max(10, iconSize * 0.14), 16)))  // 字体随图标比例缩放，最高 16pt
-                        .foregroundStyle(.white)
+                        // 浅色外观用黑字+白阴影；深色外观用白字+黑阴影 —— 跟随系统颜色方案自适应
+                        .foregroundStyle(colorScheme == .dark ? .white : .black)
                         .lineLimit(2)
                         .multilineTextAlignment(.center)
-                        .shadow(color: .black.opacity(0.6), radius: 2, x: 0, y: 1)
+                        .shadow(color: colorScheme == .dark ? .black.opacity(0.6) : .white.opacity(0.6),
+                                radius: 2, x: 0, y: 1)
                 }
                 .frame(width: cellWidth)
                 .opacity(isPressed && !isEditMode ? 0.8 : 1.0)

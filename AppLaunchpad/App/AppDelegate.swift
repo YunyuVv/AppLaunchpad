@@ -12,6 +12,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.regular)
+        // 启动时把持久化的外观模式（自动/浅色/深色）应用到全局，
+        // 保证 SwiftUI 各 View 的 @Environment(\.colorScheme) 立即正确。
+        UserPreferences.shared.applyAppearance()
 
         let vm = LaunchpadViewModel()
         viewModel = vm

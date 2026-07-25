@@ -33,6 +33,30 @@ final class UserPreferences: @unchecked Sendable {
         }
     }
 
+    /// 外观模式：auto = 跟随系统；light = 强制浅色；dark = 强制深色
+    /// 改动会即时应用到 NSApp.appearance，并被各 View 的 @Environment(\.colorScheme) 自动响应。
+    enum AppearanceMode: String, CaseIterable, Hashable {
+        case auto, light, dark
+    }
+    var appearanceMode: AppearanceMode = .auto {
+        didSet {
+            let v = AppearanceMode(rawValue: appearanceMode.rawValue) ?? .auto
+            if v != appearanceMode { appearanceMode = v; return }
+            defaults.set(appearanceMode.rawValue, forKey: Keys.appearanceMode)
+            applyAppearance()
+        }
+    }
+    /// 把外观模式应用到全局（NSApp.appearance）。
+    /// nil = 跟随系统；.aqua/.darkAqua 强制。
+    /// AppDelegate 启动时也会显式调一次，确保启动即生效。
+    func applyAppearance() {
+        switch appearanceMode {
+        case .auto:  NSApp.appearance = nil
+        case .light: NSApp.appearance = NSAppearance(named: .aqua)
+        case .dark:  NSApp.appearance = NSAppearance(named: .darkAqua)
+        }
+    }
+
     /// 每行图标列数（0 = 根据屏幕宽度自动，3~12 = 手动指定）
     var columnCountOverride: Int = 0 {
         didSet { defaults.set(max(0, columnCountOverride), forKey: Keys.columnCountOverride) }
@@ -255,6 +279,7 @@ final class UserPreferences: @unchecked Sendable {
             ? d.double(forKey: Keys.trackpadPagingGain).clamped(to: 1...8)
             : 4.0
         launchAtLogin            = d.bool(forKey: Keys.launchAtLogin)
+        appearanceMode           = AppearanceMode(rawValue: d.string(forKey: Keys.appearanceMode) ?? "") ?? .auto
         isCapturingHotkey        = false
     }
 
@@ -287,6 +312,7 @@ final class UserPreferences: @unchecked Sendable {
         sidePadding = 0
         topPadding = 0
         bottomPadding = 0
+        appearanceMode = .auto
     }
 
     /// 当前快捷键的可读描述，用于设置 UI 展示
@@ -366,6 +392,7 @@ final class UserPreferences: @unchecked Sendable {
         static let hotkeyKeyLabel           = "hotkeyKeyLabel"
         static let trackpadPagingGain       = "trackpadPagingGain"
         static let launchAtLogin            = "launchAtLogin"
+        static let appearanceMode           = "appearanceMode"
     }
 }
 

@@ -17,6 +17,7 @@ struct FolderThumbnailView: View {
     var showDeleteButton: Bool = true
 
     @State private var folderIconImages: [String: NSImage] = [:]
+    @Environment(\.colorScheme) private var colorScheme
 
     // 自定义 init：同步预填缓存命中的文件夹图标，避免每次进屏（含翻页时相邻页挂载）
     // 先闪 ProgressView 再异步加载的闪烁。与 AppIconView 的 IconCache.cachedIcon 同步兜底同思路。
@@ -53,11 +54,12 @@ struct FolderThumbnailView: View {
             if showName {
                 Text(folder.name)
                     .font(.system(size: min(max(10, iconSize * 0.14), 16)))
-                    .foregroundStyle(.white)
+                    // 跟随系统颜色方案：浅色外观黑字+白阴影；深色外观白字+黑阴影
+                    .foregroundStyle(colorScheme == .dark ? .white : .black)
                     .lineLimit(2)
                     .multilineTextAlignment(.center)
-                    // 与普通 app 对齐：白字 + 黑色阴影确保浅色玻璃背景下仍清晰可读
-                    .shadow(color: .black.opacity(0.6), radius: 2, x: 0, y: 1)
+                    .shadow(color: colorScheme == .dark ? .black.opacity(0.6) : .white.opacity(0.6),
+                            radius: 2, x: 0, y: 1)
                     .frame(width: iconSize + 20)
             }
         }
