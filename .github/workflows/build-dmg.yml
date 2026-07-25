@@ -83,7 +83,7 @@ jobs:
           rm -rf "$STAGING"
           mkdir -p "$STAGING"
           cp -R "$APP_PATH" "$STAGING/"
-          cp scripts/release/install.command "$STAGING/"
+          cp scripts/release/README.txt "$STAGING/"
           ln -s /Applications "$STAGING/Applications"
           hdiutil create -volname "$DMG_NAME" \
             -srcfolder "$STAGING" \
@@ -111,12 +111,10 @@ jobs:
           TAG="${GITHUB_REF_NAME}"
           NOTES="未签名 DMG（开源技术人分发版）。
 
-          方式一（推荐）：挂载 DMG 后双击里面的 install.command，自动安装到 /Applications 并去除隔离属性（需输入管理员密码）。
-          方式二（手动）：执行
-          \`\`\`bash
-          sudo xattr -r -d com.apple.quarantine /Applications/AppLaunchpad.app
-          \`\`\`
-          首次启动：右键 AppLaunchpad.app → 打开 → 点「仍要打开」；
+          挂载 DMG 后请阅读里面的 README.txt，按三步安装：
+          1) 把 AppLaunchpad.app 拖到 /Applications；
+          2) 终端执行 \`sudo xattr -r -d com.apple.quarantine /Applications/AppLaunchpad.app\`；
+          3) 首次打开时点「打开」。
           到 系统设置 → 隐私与安全性 → 辅助功能 中打开 AppLaunchpad（全局快捷键 ⌥+Space 必需）。"
           if gh release view "$TAG" >/dev/null 2>&1; then
             echo "Release $TAG 已存在，追加/覆盖 DMG 资产"

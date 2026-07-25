@@ -25,8 +25,13 @@
 ## 1. 发版全流程（AI 照做）
 
 ### 步骤 1 — 更新 CHANGELOG（唯一需人工/AI 手写的内容）
-编辑 `scripts/release/CHANGELOG.md`，为本次版本新增一段说明。
-- 该文件会被 `release-gh.sh` 当作 Release 的完整说明（`--notes-file`）。
+**双文件分工（务必遵守）：**
+- `scripts/release/CHANGELOG.md`：**只放本次要发布的版本说明**（不含历史）。发版前把新版本条目写在这里，替换旧内容；脚本用它作 Release 的 `--notes-file`。
+- `scripts/release/CHANGELOG-ALL.md`：**完整累计历史**。每次发布时，把本次版本条目**追加到本文件顶部**（最新在上），历史条目原样保留。
+
+操作步骤：
+1. 把本次版本说明写入 `CHANGELOG.md`（**覆盖**旧版，不要保留历史）。
+2. 把同一条目追加到 `CHANGELOG-ALL.md` 顶部（保留全部历史）。
 - 段落标题建议与版本号一致，例如 `## v0.2.0`。
 - 这是流程里**唯一非自动**的环节，AI 必须补全对应版本的条目，否则 Release 说明会缺失/陈旧。
 
@@ -66,7 +71,8 @@
 | 文件 | 角色 | 谁改 | 说明 |
 |------|------|------|------|
 | `AppLaunchpad/AppLaunchpad/Info.plist` | **版本真源** | 脚本自动（`release-gh.sh`） | `CFBundleShortVersionString`（对外版本）+ `CFBundleVersion`（内部构建号，每次 +1） |
-| `scripts/release/CHANGELOG.md` | Release 说明 | **AI/人工** | 必须补对应版本段落；脚本只读不写 |
+| `scripts/release/CHANGELOG.md` | 本次 Release 说明 | **AI/人工** | 只写当前版本、不含历史；脚本只读不写，作 `--notes-file` |
+| `scripts/release/CHANGELOG-ALL.md` | 完整累计历史 | **AI/人工** | 每次发布把新版本条目追加到顶部；历史原样保留 |
 | `.github/workflows/build-dmg.yml` | CI 打包流水线 | 一般不动 | 产物名固定 `AppLaunchpad.dmg`，**不要改成带版本号** |
 | git tag `vX.Y.Z` | 发布标记 | 脚本自动建并推送 | 触发 CI 的唯一条件（仅 `v*` tag 出 DMG） |
 | `AppLaunchpad/AppLaunchpad/Info.plist` 的提交 | 版本提交的载体 | 脚本自动 commit+push | 让 tag 指向含新版本的 commit，CI 打出来的包才是新版本 |
