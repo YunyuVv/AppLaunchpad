@@ -32,15 +32,20 @@
 - 拖拽 clamp 用 items.count，落点几何化（GridGeometry 固定几何），make-way 常驻。
 
 ## 数据/其他
-- 布局：`LayoutStore`(actor)+JSON `~/Library/Application Support/AppLaunchpad/layout.json`（`folders` 字段运行时恒空）。偏好 `UserPreferences`→UserDefaults.standard（按 bundle id 分域，改 id 历史设置重置）。
+- 布局：`LayoutStore`(actor)+JSON `~/Library/Application Support/AppLaunchpad/layout.json`（`folders` 字段运行期非空，文件夹功能完整实现）。偏好 `UserPreferences`→UserDefaults.standard（按 bundle id 分域，改 id 历史设置重置）。
 - 退出：后台常驻（状态栏+全局热键+NSPanel）；设置窗红叉只关窗不退出；退出仅 ⌘Q/状态栏；Dock 左键→toggle。
 - bundle id：`com.applaunchpad.app` → `com.biliww.applaunchpad`（project.yml: bundleIdPrefix=com.biliww + PRODUCT_BUNDLE_IDENTIFIER=com.biliww.applaunchpad）。
 
 ## 暂缓 / 已知难点
-- **设置窗口浮于启动台上方 + 背景虚化（2026-07-25 回滚，未做）**：启动台面板 `level = screenSaverWindow-1`（极高，盖 Dock/菜单栏/一切）。多方案尝试均判"不行"，用户回滚保留最早"降面板 hack"基线（`AppDelegate` 监听全局 `didBecomeKey`→`lowerPanelForSettings()` 把面板降到 `.normal`，关闭再 `restorePanelLevel()` 升回）。沉淀坑（勿重复踩）：
+- **设置窗口浮于启动台上方 + 背景虚化（2026-07-25 已决策不做，相关 hack 已彻底移除）**：启动台面板 `level = screenSaverWindow-1`（极高，盖 Dock/菜单栏/一切）。多方案尝试均判"不行"，用户于 20:19 回滚并**彻底移除**最早的"降面板 hack"（`lowerPanelForSettings`/`restorePanelLevel`/`setupWindowObservers` 全套已删）。当前设置窗口 = 普通独立 SwiftUI `Window(id:"settings")` 场景（经 `AppDelegate.openSettings`→`settingsOpener`→`openWindow(id:)`），启动台可见时开设置会落在面板之后（用户接受）。**沉淀坑（勿重复踩，详见 `docs/开发指南.md` §6.6 / `docs/待办事项.md` C1）**：
   ① 跨窗口层级时序竞态（先降启动台再开设置，becomeKey 之前压不住）；
   ② macOS SwiftUI `.contextMenu` 与同视图 `.simultaneousGesture(DragGesture)` 冲突→右键菜单弹不出（绕过：用 `NSView` `hitTest` 只拦右键/control+左键、左键拖拽透传）；
   ③ `Window(id:)` 场景被关闭后 `openWindow(id:)` 重开不可靠（SwiftUI 已知 bug）→ 改手动托管 `NSWindow`（`isReleasedWhenClosed=false`, `orderFront`）可解重开，但方案整体被否；
   ④ `NSViewRepresentable` 的 `.background` 子视图 `makeNSView` 时 `view.window == nil` → 想在那设 `window.level` 拿不到窗口（须改 `updateNSView` 等挂载后再设）；
   ⑤ 设置窗口打开时启动台键盘 monitor 仍在跑 → ESC 误关启动台/字母误入搜索，须 monitor 顶部 `guard panel?.isKeyWindow == true`。
   取舍：独立不透明窗口浮层→虚化只在窗口四周边缘外可见（非整屏虚化）；overlay 浮层需丢系统标题栏（样式变化）。若未来重做，要么接受样式变化（overlay 进 `LaunchpadView` ZStack + `FolderBackdropView` 虚化），要么手动托管半透明窗口。
+
+## 权威文档（后续 AI 必读）
+- 已完成功能：`docs/产品文档.md`　未完成/已放弃：`docs/待办事项.md`　技术知识库（坑/红线/架构）：`docs/开发指南.md`　分发流程步骤：`docs/分发流程.md`
+- 本文是上述文档的精简红线版（自动注入上下文）；改代码前务必核对三文档，以**当前代码事实**为准（旧 `docs/` 下 30+ 历史文档可能过时，且多处误述"文件夹已移除"，实际已实现）。
+- **分发红线**：当前 `project.yml` 用 `Apple Development`（开发证书，仅本机/同Team），分发他人必须切 `Developer ID Application` + 公证（`docs/分发流程.md` 第 0–7 步）。**GPL v3 版权红线**：外观三卡片 HEIC 复制自 LaunchNext（GPL v3），闭源分发前必须替换为自制资源或整体开源——这是分发的硬性前置（分发流程.md §0.1）。MAS 不可行（非沙盒 + 全局快捷键/Accessibility/FSEvents）。
