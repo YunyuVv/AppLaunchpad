@@ -1,5 +1,7 @@
 import AppKit
+import CoreServices
 import Foundation
+import os
 
 /// 异步扫描 macOS 应用目录，过滤后台/纯系统内部应用，返回去重后的应用列表
 actor AppScanner {
@@ -88,6 +90,22 @@ actor AppScanner {
             fallback: baseDisplayName
         )
 
+        // 系统级本地化兜底：当 app 自身 bundle 没有可用本地化时（多数苹果第一方应用
+        // 如 Photos 的 zh_CN.lproj 为空、只有英文 CFBundleDisplayName="Photos"），
+        // 用 Spotlight 的公开 API `NSMetadataItemDisplayNameKey`（对应 kMDItemDisplayName）
+        // 取系统级中文名（"照片"），与访达/系统启动台一致。该 API 走 Spotlight 索引缓存，
+        // 单次亚毫秒级，且结果按路径 memo 化，只在 bundle 无本地化时才会被调用，
+        // 因此不会拖慢启动。无需任何私有符号 / dlsym。
+        let finalDisplayName: String
+        if displayName == baseDisplayName,
+           let sysName = systemDisplayName(for: url),
+           sysName != displayName
+        {
+            finalDisplayName = sysName
+        } else {
+            finalDisplayName = displayName
+        }
+
         let isMASApp = FileManager.default.fileExists(
             atPath: url.appendingPathComponent("Contents/_MASReceipt").path
         )
@@ -95,7 +113,7 @@ actor AppScanner {
         return AppInfo(
             id: bundleID,
             bundleID: bundleID,
-            displayName: displayName,
+            displayName: finalDisplayName,
             url: url,
             isMASApp: isMASApp
         )
@@ -159,5 +177,27 @@ actor AppScanner {
             }
         }
         return fallback
+    }
+
+    // MARK: - 系统级本地化显示名（兜底 Photos 等第一方应用）
+
+    /// 系统级本地化名缓存（按 app 路径）。扫描整进程只发生有限次，缓存避免重复查询
+    /// Spotlight 元数据；即使被多次调用也只付一次成本，确保不影响启动速度。
+    private static let systemNameCache = OSAllocatedUnfairLock<[String: String?]>(initialState: [:])
+
+    /// 取系统级本地化显示名（Spotlight 公开 API，对应 `mdls -name kMDItemDisplayName`）。
+    /// 返回与访达/系统启动台一致的系统级 App 名（如 Photos → "照片"），来源是系统级
+    /// App 名数据库，而非 bundle 自身 lproj。仅在 app 自身 bundle 无可用本地化时由
+    /// `makeAppInfo` 调用。返回 nil 表示无法获取，此时沿用原显示名。
+    private static func systemDisplayName(for url: URL) -> String? {
+        if let cached = systemNameCache.withLock({ $0[url.path] }) { return cached }
+        let result: String? = {
+            guard let item = NSMetadataItem(url: url) else { return nil }
+            guard let name = item.value(forAttribute: NSMetadataItemDisplayNameKey) as? String,
+                  !name.isEmpty else { return nil }
+            return name
+        }()
+        systemNameCache.withLock { $0[url.path] = result }
+        return result
     }
 }
