@@ -156,4 +156,112 @@ final class LayoutService {
 
         return LayoutData(pages: pages.isEmpty ? [newItems] : pages, folders: saved.folders)
     }
+
+    // MARK: - 原生启动台布局导入 / 恢复
+
+    /// 导入结果：成功携带统计；失败仅描述原因，**绝不**写入 `data.layout`。
+    enum NativeImportResult {
+        /// - apps: 导入后布局中的 App 总数（含追加项）
+        /// - folders: 导入的文件夹数
+        /// - skipped: 原生库中有、但本机未安装的 App（已跳过）
+        /// - appended: 本机已安装、但原生库未收录、被自动追加到末页的 App（如后续安装 / 包裹型）
+        case success(apps: Int, folders: Int, skipped: Int, appended: Int)
+        case noDatabase
+        case parseError(String)
+    }
+
+    /// 导入系统原生启动台布局（保序重流 + 自动备份）。
+    ///
+    /// 安全保障：任何失败（无数据库 / 解析异常 / 空结果）都只返回错误结果，
+    /// **绝不写 `data.layout`、绝不保存**——当前布局与现有功能完全不受影响。
+    /// 仅当解析成功后才 `backup()` 再覆盖，并回到第 1 页。
+    @discardableResult
+    func importNativeLayout() async -> NativeImportResult {
+        guard NativeLaunchpadImporter.hasImportableDatabase() else { return .noDatabase }
+
+        let scannedIDs = Set(data.allApps.map(\.bundleID))
+        let per = itemsPerPage
+
+        // sqlite 读取放到后台线程，避免阻塞主线程；返回具体 Sendable 错误类型以跨 actor。
+        let parseResult: Result<[NativeCell], NativeImportError> = await Task.detached(priority: .userInitiated) {
+            do { return .success(try NativeLaunchpadImporter.parseNativeLayout()) }
+            catch let err as NativeImportError { return .failure(err) }
+            catch { return .failure(.parseFailure(error.localizedDescription)) }
+        }.value
+
+        switch parseResult {
+        case .failure(let err):
+            return .parseError(err.localizedDescription)
+        case .success(let cells):
+            guard !cells.isEmpty else { return .parseError("系统启动台为空或无已安装 App") }
+
+            // 映射为 LayoutData（此段在主线程，操作 data）
+            var pages: [[LayoutItem]] = []
+            var folders: [UUID: FolderInfo] = [:]
+            var current: [LayoutItem] = []
+            var skipped = 0
+
+            for cell in cells {
+                switch cell {
+                case .app(let bid):
+                    if scannedIDs.contains(bid) { current.append(.app(bundleID: bid)) }
+                    else { skipped += 1 }
+                case .folder(let name, let bids):
+                    let installed = bids.filter { scannedIDs.contains($0) }
+                    guard !installed.isEmpty else { continue }
+                    let id = UUID()
+                    folders[id] = FolderInfo(id: id, name: name, appIDs: installed, isUserNamed: true)
+                    current.append(.folder(id: id))
+                }
+                if current.count >= per { pages.append(current); current.removeAll() }
+            }
+            if !current.isEmpty { pages.append(current) }
+
+            // 统计已纳入布局的 App（含文件夹内部的 App）
+            let placedAppIDs = Set(pages.flatMap { $0 }.compactMap { item -> String? in
+                if case .app(let id) = item { return id }
+                return nil
+            })
+            let folderAppIDs = Set(folders.values.flatMap { $0.appIDs })
+            let coveredIDs = placedAppIDs.union(folderAppIDs)
+
+            // 追加：本机已安装、但原生布局未收录的 App（如后续安装 / 不被启动台收录的包裹型 app）。
+            // 这保证「导入绝不会让任何一个已安装 App 从启动台消失」。
+            let missing = data.allApps
+                .filter { !coveredIDs.contains($0.bundleID) }
+                .map { LayoutItem.app(bundleID: $0.bundleID) }
+
+            var appended = 0
+            for item in missing {
+                appended += 1
+                if pages.isEmpty {
+                    pages = [[item]]
+                } else if pages[pages.count - 1].count < per {
+                    pages[pages.count - 1].append(item)
+                } else {
+                    pages.append([item])
+                }
+            }
+
+            // 先备份当前布局，再覆盖
+            await store.backup()
+            data.layout = LayoutData(pages: pages, folders: folders)
+            data.currentPageIndex = 0
+            data.saveLayout()
+            return .success(apps: pages.flatMap { $0 }.count, folders: folders.count, skipped: skipped, appended: appended)
+        }
+    }
+
+    /// 恢复为默认布局：按当前扫描结果重新生成（保序），先备份再覆盖。
+    /// 失败（未扫描到 App）不写 `data.layout`，不影响现有布局。
+    @discardableResult
+    func restoreDefaultLayout() async -> NativeImportResult {
+        guard !data.allApps.isEmpty else { return .parseError("尚未扫描到任何 App") }
+        await store.backup()
+        let fresh = LayoutData.initial(from: data.allApps, itemsPerPage: itemsPerPage)
+        data.layout = fresh
+        data.currentPageIndex = 0
+        data.saveLayout()
+        return .success(apps: fresh.pages.flatMap { $0 }.count, folders: 0, skipped: 0, appended: 0)
+    }
 }

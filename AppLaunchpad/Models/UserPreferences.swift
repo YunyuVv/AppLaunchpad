@@ -250,6 +250,15 @@ final class UserPreferences: @unchecked Sendable {
         }
     }
 
+    // MARK: - 布局（原生启动台导入）
+
+    /// 是否使用「导入的原生启动台布局」。
+    /// 仅作状态标记：ON = 当前布局来源于原生导入；OFF = 默认/手动布局。
+    /// 真正导入/恢复由设置页按钮触发；不自动在每次启动重导（避免覆盖用户手动调整）。
+    var useNativeLayout: Bool = false {
+        didSet { defaults.set(useNativeLayout, forKey: Keys.useNativeLayout) }
+    }
+
     // MARK: - 初始化（从 UserDefaults 载入，带默认值与范围约束）
 
     private init() {
@@ -280,6 +289,15 @@ final class UserPreferences: @unchecked Sendable {
             : 4.0
         launchAtLogin            = d.bool(forKey: Keys.launchAtLogin)
         appearanceMode           = AppearanceMode(rawValue: d.string(forKey: Keys.appearanceMode) ?? "") ?? .auto
+        // useNativeLayout 首次默认值：
+        //   已有用户：尊重他们的选择（持久化键存在即按其值）。
+        //   新用户：   系统原生 db 可用 → 默认 ON（用原生顺序铺，体验原生启动台）；
+        //              否则 → 默认 OFF（保持本项目默认布局，避免设置页 ON 但实际未导入的错觉）。
+        if d.object(forKey: Keys.useNativeLayout) != nil {
+            useNativeLayout = d.bool(forKey: Keys.useNativeLayout)
+        } else {
+            useNativeLayout = NativeLaunchpadImporter.hasImportableDatabase()
+        }
         isCapturingHotkey        = false
     }
 
@@ -393,6 +411,7 @@ final class UserPreferences: @unchecked Sendable {
         static let trackpadPagingGain       = "trackpadPagingGain"
         static let launchAtLogin            = "launchAtLogin"
         static let appearanceMode           = "appearanceMode"
+        static let useNativeLayout          = "useNativeLayout"
     }
 }
 

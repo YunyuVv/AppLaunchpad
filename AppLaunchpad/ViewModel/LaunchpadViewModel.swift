@@ -175,6 +175,15 @@ final class LaunchpadViewModel {
 
     func loadApps() async { await layoutService.loadApps() }
     func refreshApps() async { await layoutService.refreshApps() }
+
+    // MARK: - 原生启动台布局导入 / 恢复（→ LayoutService）
+
+    func importNativeLayout() async -> LayoutService.NativeImportResult {
+        await layoutService.importNativeLayout()
+    }
+    func restoreDefaultLayout() async -> LayoutService.NativeImportResult {
+        await layoutService.restoreDefaultLayout()
+    }
     func saveLayout() { data.saveLayout() }
     func show() { data.isVisible = true }
     func hide() {

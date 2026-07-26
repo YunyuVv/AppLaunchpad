@@ -18,6 +18,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         let vm = LaunchpadViewModel()
         viewModel = vm
+        AppContext.viewModel = vm
         windowController = LaunchpadWindowController(viewModel: vm)
 
         setupStatusItem()

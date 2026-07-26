@@ -24,4 +24,14 @@ actor LayoutStore {
         guard let data = try? Data(contentsOf: fileURL) else { return nil }
         return try? JSONDecoder().decode(LayoutData.self, from: data)
     }
+
+    /// 导入/恢复布局前调用：把当前 layout.json 复制为 layout.backup.json（覆盖旧备份）。
+    /// 仅在源文件存在时生效；失败静默忽略（不影响主流程）。
+    func backup() async {
+        let src = fileURL
+        let dst = fileURL.deletingLastPathComponent().appendingPathComponent("layout.backup.json")
+        guard FileManager.default.fileExists(atPath: src.path) else { return }
+        try? FileManager.default.removeItem(at: dst)
+        try? FileManager.default.copyItem(at: src, to: dst)
+    }
 }
