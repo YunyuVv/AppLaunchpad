@@ -74,3 +74,7 @@ open AppLaunchpad.xcodeproj
 | `docs/` | 产品文档 / 开发指南 / 待办事项 |
 | `references/` | 第三方参考实现（LaunchNext） |
 | `scripts/` | 构建 / 发布脚本 |
+
+
+# 社区
+https://linux.do
