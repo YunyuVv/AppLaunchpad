@@ -3,7 +3,7 @@
 # release-gh.sh — 一键发布 GitHub Release（自动升版本 + 触发 CI 云端打包未签名 DMG）
 #
 # 用法：
-#   ./scripts/release/release-gh.sh            # 不传版本 → 按 BUMP 自动加一（默认 minor：0.1.0 → 0.2.0）
+#   ./scripts/release/release-gh.sh            # 不传版本 → 按 BUMP 自动加一（默认 patch：0.3.0 → 0.3.1）
 #   ./scripts/release/release-gh.sh 0.2.0      # 显式指定版本（带不带 v 都行）
 #   ./scripts/release/release-gh.sh v0.2.0
 #
@@ -28,7 +28,11 @@ cd "$REPO_ROOT"
 # ── 可配置项（脚本前几行修改）──────────────────────────────
 NOTES_FILE="$SCRIPT_DIR/CHANGELOG.md"   # 版本说明文件（默认脚本同目录 CHANGELOG.md，可改绝对/相对路径）
 TITLE_PREFIX=""                         # Release 标题前缀；留空则标题 = 标签名（如 v0.2.0）
-BUMP="minor"                            # 不传版本参数时的自动加一位：major / minor / patch
+BUMP="patch"                            # 不传版本参数时的自动加一位：major / minor / patch
+                                        #   默认 patch（第三位+1）：修复、性能优化、小调整——本项目绝大多数发版属此类
+                                        #   加向下兼容的新功能 → 显式传版本（如 release-gh.sh 0.4.0 即 minor：第二位+1）
+                                        #   不兼容的重大改动/重构 → 显式传版本（如 release-gh.sh 1.0.0 即 major：第一位+1）
+                                        #   即：不传=patch，要 minor/major 请显式给版本号（脚本会自动识别 X.Y.Z）
 AUTO_COMMIT=1                           # 是否自动 git 提交并推送 Info.plist 的版本改动（1=是，0=否）
 # ──────────────────────────────────────────────────────────
 
@@ -85,7 +89,7 @@ else
     exit 1
   fi
   VER=$(bump_version "$CUR_VER" "$BUMP")
-  echo "▶ 未指定版本，按 BUMP=$BUMP 自动加一：$CUR_VER → $VER"
+  echo "▶ 未指定版本，按默认 BUMP=$BUMP 自动加一（patch=第三位+1，修复/性能优化）：$CUR_VER → $VER"
 fi
 
 # 校验版本号格式 X.Y.Z
