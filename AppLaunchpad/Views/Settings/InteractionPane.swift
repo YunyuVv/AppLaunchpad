@@ -118,13 +118,18 @@ struct InteractionPane: View {
                     }
                 }
 
-                Text("⚠️ 在系统设置中开启后，必须**完全退出本程序（⌘Q）并重新启动**才会生效；仅关闭设置窗口无效。")
+                Text("⚠️ 在系统设置中开启后，必须**完全退出本程序（⌘Q）并重新启动**才会生效；仅关闭设置窗口无效。\n如在「辅助功能」列表中找不到 AppLaunchpad，请先关闭本程序，再重新启动一次即可出现。")
                     .font(.caption)
                     .foregroundStyle(.orange)
 
                 HStack {
-                    Button(AXIsProcessTrusted() ? "重新打开辅助功能设置" : "一键添加辅助功能权限…") {
-                        requestAccessibility()
+                    Button(AXIsProcessTrusted() ? "重新打开辅助功能设置" : "打开辅助功能设置…") {
+                        // App 启动时已通过 NSEvent.addGlobalMonitorForEvents 让系统把本 App
+                        // 自动登记到辅助功能列表，无需 AXIsProcessTrustedWithOptions 显式申请
+                        // （那会强制弹系统授权框，绕一圈反而打断用户）。
+                        if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility") {
+                            NSWorkspace.shared.open(url)
+                        }
                     }
                     .controlSize(.small)
                     Spacer()
@@ -148,15 +153,6 @@ struct InteractionPane: View {
         .onChange(of: prefs.hotkeyEnabled) { _, _ in
             // 开启快捷键时若全局监听未建立（例如授权前启动、授权后才打开开关），立即重建，无需整机重启
             (NSApp.delegate as? AppDelegate)?.ensureGlobalHotkey()
-        }
-    }
-
-    // 让系统把本 App 登记进辅助功能列表并弹出授权提示，再跳到设置页
-    private func requestAccessibility() {
-        let opts = ["AXTrustedCheckOptionPrompt": true] as CFDictionary
-        AXIsProcessTrustedWithOptions(opts)
-        if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility") {
-            NSWorkspace.shared.open(url)
         }
     }
 }
