@@ -41,10 +41,11 @@ actor IconCache {
     }
 
     /// 批量预热：后台一次性把全部 app 图标加载、缩放并缓存。
-    /// 调用后首屏/翻页时 `cachedIcon` 全部命中，不在主线程做磁盘 IO。
-    /// 幂等：已缓存的跳过，可安全重复调用（如 FSEvents 刷新后）。
+    /// 调用后首屏/翻页时 `cachedIcon` 直接命中缓存，不在主线程做磁盘 IO。
+    /// 使用 `.userInitiated` 优先级，让冷启动后图标尽快就绪（缩短用户按快捷键
+    /// 打开前「预热未完成」的窗口）。幂等：已缓存的跳过，可安全重复调用。
     func prewarm(_ apps: [AppInfo]) {
-        Task.detached(priority: .utility) { [apps] in
+        Task.detached(priority: .userInitiated) { [apps] in
             for app in apps {
                 let key = app.bundleID as NSString
                 guard Self.cache.object(forKey: key) == nil else { continue }
@@ -56,22 +57,19 @@ actor IconCache {
         }
     }
 
-    /// 同步查询缓存（不触发异步加载）。用于视图重建时立即拿到已缓存图标，
-    /// 避免翻页等场景下 AppIconView 重建导致图标短暂回 nil、显示灰色占位一闪。
-    /// 若缓存未命中，则同步取系统图标、缩放并回填缓存（兜底）——保证视图重建时
-    /// 永远有图标、不闪灰。这样即使翻页动画取消了淡入（整页滑动、opacity 恒 1.0），
-    /// 也绝不会出现灰框。
+    /// 仅查询内存缓存，**不**触发任何加载或同步 IO。
+    /// 未命中返回 nil，由调用方（AppIconView / FolderThumbnailView）通过 `.task`
+    /// 或异步 loader 在后台补齐。
+    ///
+    /// ⚠️ 历史教训：早期版本在此处做了「同步取系统图标 + 离屏缩放 + 回填」的兜底，
+    /// 意图是让首屏/翻页不闪灰，但那是**冷启动首屏与翻页卡顿的根因**——
+    /// 预热（后台 task）在用户按快捷键打开前往往未完成，导致首屏/翻页首次构建的
+    /// 几十~上百个 AppIconView 在**主线程**同步执行 `NSWorkspace.shared.icon(forFile:)`
+    /// + 位图绘制，阻塞主线程几百毫秒（「卡一下」）。改为纯查询后主线程绝不被图标
+    /// IO 阻塞；未命中项由 `.task`/异步 loader 在后台补齐（通常一瞬即淡入），
+    /// 体验远优于「卡一下」。文件夹缩略图本就有异步分支，完全兼容。
     nonisolated static func cachedIcon(for app: AppInfo) -> NSImage? {
-        let key = app.bundleID as NSString
-        if let cached = Self.cache.object(forKey: key) {
-            return cached
-        }
-        // 兜底：同步取系统图标并缩放回填缓存。NSWorkspace 本身有系统级缓存，
-        // 单次取图标开销极小；预热已覆盖绝大多数 app，此处仅兜底极少数冷图标。
-        let raw = NSWorkspace.shared.icon(forFile: app.url.path)
-        let result = Self.resized(raw) ?? raw
-        Self.cache.setObject(result, forKey: key)
-        return result
+        Self.cache.object(forKey: app.bundleID as NSString)
     }
 
     /// 清空全部缓存（内存警告时调用）

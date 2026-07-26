@@ -73,11 +73,11 @@ final class LayoutService {
         // 先用 bundle 本地化名（可能英文）立即显示，避免等待 Spotlight 索引冷启动。
         data.allApps = scanned
 
-        // 后台批量预热所有图标（预缩放 + 缓存），首屏与翻页时 cachedIcon 直接命中，
-        // 不在主线程做磁盘 IO——根治「第一次打开启动台 / 第一次翻页很卡」。
-        Task.detached(priority: .utility) {
-            await IconCache.shared.prewarm(scanned)
-        }
+        // 预热：内部以 .userInitiated 在后台批量加载 + 缩放 + 缓存全部图标。
+        // 首次打开/翻页时 cachedIcon 直接命中缓存，且**绝不阻塞主线程**
+        // （早期同步兜底导致的冷启动卡顿已根除：见 IconCache.cachedIcon 注释）。
+        // prewarm 内部自行 detached，此处 await 仅触发、不等待其完成。
+        await IconCache.shared.prewarm(scanned)
 
         // 后台补查系统级中文名（Photos→"照片" 等）。resolveSystemNames 内部已在后台
         // 线程查询 Spotlight，此处用 async let 与下方布局加载并行；完成后再于主线程
@@ -111,10 +111,9 @@ final class LayoutService {
             data.currentPageIndex = max(0, data.totalPages - 1)
         }
 
-        // 后台批量预热所有图标（预缩放 + 缓存），翻页/重建直接命中，消除首次卡顿。
-        Task.detached(priority: .utility) {
-            await IconCache.shared.prewarm(scanned)
-        }
+        // 预热：内部 .userInitiated 后台批量加载 + 缩放 + 缓存全部图标，
+        // 翻页/重建直接命中，且绝不阻塞主线程（早期同步兜底卡顿已根除）。
+        await IconCache.shared.prewarm(scanned)
 
         // 系统级中文名后台异步补查（同 loadApps）：resolveSystemNames 内部已在后台线程
         // 查询 Spotlight，此处 await 其结果后于主线程回写 data.allApps，UI 自动从英文

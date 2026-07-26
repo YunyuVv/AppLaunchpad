@@ -32,7 +32,8 @@
 
 ## 数据/其他
 - 布局：`LayoutStore`(actor)+JSON `~/Library/Application Support/AppLaunchpad/layout.json`。`LayoutData(pages:[[LayoutItem]], folders:[UUID:FolderInfo], version:1)`，`version` 是数据格式版本非 app 版本。
-- 版本号真源=`AppLaunchpad/AppLaunchpad/Info.plist`(CFBundleShortVersionString+CFBundleVersion)。CI 产物 DMG 恒名 `AppLaunchpad.dmg`，固定链接 `.../releases/latest/download/AppLaunchpad.dmg`。发版：改 Info.plist→`./scripts/release/release-gh.sh <ver>`。流程见 `scripts/release/RELEASE.md`。
+- 版本号真源=`AppLaunchpad/AppLaunchpad/Info.plist`(CFBundleShortVersionString+CFBundleVersion)。CI 产物 DMG 恒名 `AppLaunchpad.dmg`，固定链接 `.../releases/latest/download/AppLaunchpad.dmg`。发版：`./scripts/release/release-gh.sh <ver>`（显式传版本号最稳妥）；不传版本则按脚本内 `BUMP` 自动加一。
+- **版本号 SemVer 规则（用户偏好，已固化为脚本默认 `BUMP=patch`）**：X=major(不兼容重大改动) / Y=minor(向下兼容新功能) / Z=patch(向下兼容修复·性能优化·小调整)。本项目发版多为修复/性能优化 → 默认走 **patch（第三位+1）**；加新功能传显式版本如 `release-gh.sh 0.4.0`(=minor 第二位+1)；破坏性改动传 `1.0.0`(=major)。⚠️ 之前误用默认 `BUMP=minor`，把纯性能优化发成了 v0.4.0（应为 v0.3.1），用户决定保留 0.4.0 但下次按 patch 走。流程见 `scripts/release/RELEASE.md`。
 - bundle id=`com.biliww.applaunchpad`。
 - 分发：用户选**开源发布(GPL v3)**，可发未签名包（`xattr -r -d com.apple.quarantine`）；`project.yml` 当前 Apple Development 签名，开源分发前须改未签名。
 
@@ -41,6 +42,13 @@
 - 用系统 `import SQLite3`（动态链 `/usr/lib/libsqlite3.dylib`，app 体积零增长），运行时只读；db 文件(8.5MB)不打包。
 - 映射：`Cell`(app/folder) 序列按本机 itemsPerPage 重流→`LayoutData`；folder→`FolderInfo`；未安装 bundleID 跳过。导入前 `layout.backup.json` 备份。参考 `references/LaunchNext/NativeLaunchpadImporter.swift`。
 - **落地功能（2026-07-26）**：`NativeLaunchpadImporter.swift` + `LayoutService.importNativeLayout()`/`restoreDefaultLayout()` + `LayoutStore.backup()` + 设置页「布局」Section（Toggle 导入原生布局 + 恢复默认布局 + 结果文案）。失败只报错误、绝不写 `data.layout`，保现有功能。设计稿 `docs/技术实现/07-导入原生启动台布局设计.md`。
+
+## 性能特征（已知）
+- **冷启动首屏/翻页卡顿（2026-07-26 已根除）**：根因是 `AppIconView.init` 同步调 `IconCache.cachedIcon`，旧实现缓存未命中时在主线程同步 `NSWorkspace.shared.icon(forFile:)` + 离屏缩放绘制；冷启动 `prewarm`(原 `.utility`)未完成、缓存近乎全空 → 首屏/翻页首次构建的几十~上百个 `AppIconView` 在主线程同步取图 → "卡一下"。热启动 `panel` 已存在不重建、且缓存已热 → 不卡（**此现象可排除 Dock 隐藏**，因 Dock 隐藏每次触发、应每次都卡）。
+  - **修复**：`cachedIcon` 改为**纯查询缓存**（未命中返回 nil，绝不在主线程取图/缩放），未命中由 `.task`（`await IconCache.shared.icon`）/ `FolderThumbnailView` 异步 loader 后台补齐；`prewarm` 优先级 `.utility`→`.userInitiated`，并去掉 `loadApps`/`refreshApps` 外层冗余 `Task.detached(.utility)` 包裹。BUILD SUCCEEDED、未发版。代价：极端(冷启动且预热未完成即翻页)极少数图标先占位后淡入，优于"卡一下"。详见 `docs/开发指南.md` §9。
+- 打开启动台卡顿**另一可能**（每次 show/hide 都卡）：`NSApp.presentationOptions = [.hideDock, .autoHideMenuBar]` 触发 WindowServer **主线程同步**重配 Dock+菜单栏，属 macOS 全屏模式固有税，无法消除；唯一杠杆放弃隐藏 Dock（改观感，已决定**保留**）。
+- `show()` 里 `panel.setFrame(primaryScreen.frame, display: true)` 的 `display:true` 是一次强制同步重绘，可改 `false` 让重绘与窗口显示合并（可选小优化，暂未做、等实测确认）。
+- **排查原则**：用户实测"热启动不卡"即排除 Dock 隐藏，优先查首屏/翻页视图首次构建里的同步 IO（图标/布局/解码）。
 
 ## 权威文档
 - 功能/进度：`docs/产品文档.md`、`docs/待办事项.md`；坑/红线/架构：`docs/开发指南.md`；分发：`docs/分发流程.md`。改代码前以**当前代码事实**为准。
