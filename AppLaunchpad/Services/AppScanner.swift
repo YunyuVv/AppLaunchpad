@@ -96,21 +96,12 @@ actor AppScanner {
             fallback: baseDisplayName
         )
 
-        // 系统级本地化兜底：当 app 自身 bundle 没有可用本地化时（多数苹果第一方应用
-        // 如 Photos 的 zh_CN.lproj 为空、只有英文 CFBundleDisplayName="Photos"），
-        // 用 Spotlight 的公开 API `NSMetadataItemDisplayNameKey`（对应 kMDItemDisplayName）
-        // 取系统级中文名（"照片"），与访达/系统启动台一致。该 API 走 Spotlight 索引缓存，
-        // 单次亚毫秒级，且结果按路径 memo 化，只在 bundle 无本地化时才会被调用，
-        // 因此不会拖慢启动。无需任何私有符号 / dlsym。
-        let finalDisplayName: String
-        if displayName == baseDisplayName,
-           let sysName = systemDisplayName(for: launchURL),
-           sysName != displayName
-        {
-            finalDisplayName = sysName
-        } else {
-            finalDisplayName = displayName
-        }
+        // 系统级本地化兜底（Photos 等第一方 app）推迟到后台异步补查，见
+        // `resolveSystemNames`。此处仅在使用 bundle 自身本地化失败时（displayName
+        // 退回 baseDisplayName）标记需要补查，扫描阶段先用 baseDisplayName（可能英文）
+        // 快速返回，避免 Spotlight 索引冷时阻塞启动；系统名就绪后由 LayoutService
+        // 后台补查并回写 data.allApps，UI 自动刷新为中文。无需任何私有符号 / dlsym。
+        let needsSystemNameResolution = (displayName == baseDisplayName)
 
         let isMASApp = FileManager.default.fileExists(
             atPath: bundleURL.appendingPathComponent("Contents/_MASReceipt").path
@@ -122,9 +113,10 @@ actor AppScanner {
         return AppInfo(
             id: bundleID,
             bundleID: bundleID,
-            displayName: finalDisplayName,
+            displayName: displayName,
             url: launchURL,
-            isMASApp: isMASApp
+            isMASApp: isMASApp,
+            needsSystemNameResolution: needsSystemNameResolution
         )
     }
 
@@ -253,5 +245,32 @@ actor AppScanner {
         }()
         systemNameCache.withLock { $0[url.path] = result }
         return result
+    }
+
+    /// 后台异步补全系统级本地化显示名（Spotlight 公开 API，对应 `mdls -name kMDItemDisplayName`）。
+    /// 仅对 `needsSystemNameResolution == true` 的 app 查询——即 bundle 自身无可用本地化、
+    /// 扫描阶段先用 bundle 名（可能英文）顶替的那些（如 Photos → "照片"）。其余原样返回，
+    /// 避免覆盖已有的本地化中文名（如"微信"）。
+    /// 调用方（LayoutService）应在后台线程调用并于主线程回写 `data.allApps`，
+    /// 从而首屏/翻页先用 bundle 名（可能英文）立即出来，系统名就绪后自动刷新为中文，
+    /// 完全不阻塞扫描与首屏渲染。
+    func resolveSystemNames(_ apps: [AppInfo]) async -> [AppInfo] {
+        await Task.detached(priority: .utility) {
+            var updated = apps
+            for i in updated.indices where updated[i].needsSystemNameResolution {
+                if let sys = Self.systemDisplayName(for: updated[i].url),
+                   sys != updated[i].displayName {
+                    updated[i] = AppInfo(
+                        id: updated[i].id,
+                        bundleID: updated[i].bundleID,
+                        displayName: sys,
+                        url: updated[i].url,
+                        isMASApp: updated[i].isMASApp,
+                        needsSystemNameResolution: false
+                    )
+                }
+            }
+            return updated
+        }.value
     }
 }

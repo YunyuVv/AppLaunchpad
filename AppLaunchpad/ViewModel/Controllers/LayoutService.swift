@@ -70,6 +70,7 @@ final class LayoutService {
 
     func loadApps() async {
         let scanned = await AppScanner.shared.scan()
+        // 先用 bundle 本地化名（可能英文）立即显示，避免等待 Spotlight 索引冷启动。
         data.allApps = scanned
 
         // 后台批量预热所有图标（预缩放 + 缓存），首屏与翻页时 cachedIcon 直接命中，
@@ -78,11 +79,20 @@ final class LayoutService {
             await IconCache.shared.prewarm(scanned)
         }
 
+        // 后台补查系统级中文名（Photos→"照片" 等）。resolveSystemNames 内部已在后台
+        // 线程查询 Spotlight，此处用 async let 与下方布局加载并行；完成后再于主线程
+        // 回写 data.allApps，UI 自动从英文名刷新为中文名，完全不阻塞扫描与首屏渲染。
+        async let resolvedNames = AppScanner.shared.resolveSystemNames(scanned)
+
         if let saved = await store.load() {
             data.layout = mergeLayout(saved: saved, scanned: scanned)
         } else {
             data.layout = LayoutData.initial(from: scanned, itemsPerPage: itemsPerPage)
         }
+
+        // 等系统名补查完成（不影响上面布局加载的并行），在主线程回写。
+        let resolved = await resolvedNames
+        data.allApps = resolved
     }
 
     /// FSEvents 触发时调用：重新扫描并合并布局（保留用户排列，追加/移除变化的 App）
@@ -105,6 +115,12 @@ final class LayoutService {
         Task.detached(priority: .utility) {
             await IconCache.shared.prewarm(scanned)
         }
+
+        // 系统级中文名后台异步补查（同 loadApps）：resolveSystemNames 内部已在后台线程
+        // 查询 Spotlight，此处 await 其结果后于主线程回写 data.allApps，UI 自动从英文
+        // 名刷新为中文名，避免刷新时阻塞主线程。
+        let resolved = await AppScanner.shared.resolveSystemNames(scanned)
+        data.allApps = resolved
     }
 
     /// 合并已存储布局与最新扫描结果：保留顺序，追加新 App，移除已卸载 App
