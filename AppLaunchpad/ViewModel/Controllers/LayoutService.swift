@@ -72,6 +72,12 @@ final class LayoutService {
         let scanned = await AppScanner.shared.scan()
         data.allApps = scanned
 
+        // 后台批量预热所有图标（预缩放 + 缓存），首屏与翻页时 cachedIcon 直接命中，
+        // 不在主线程做磁盘 IO——根治「第一次打开启动台 / 第一次翻页很卡」。
+        Task.detached(priority: .utility) {
+            await IconCache.shared.prewarm(scanned)
+        }
+
         if let saved = await store.load() {
             data.layout = mergeLayout(saved: saved, scanned: scanned)
         } else {
@@ -95,12 +101,9 @@ final class LayoutService {
             data.currentPageIndex = max(0, data.totalPages - 1)
         }
 
-        // 预加载所有 app 图标到缓存（后台、低优先级），
-        // 避免翻页时 GridPageView/AppIconView 重建闪灰色占位。
+        // 后台批量预热所有图标（预缩放 + 缓存），翻页/重建直接命中，消除首次卡顿。
         Task.detached(priority: .utility) {
-            for app in scanned {
-                _ = await IconCache.shared.icon(for: app)
-            }
+            await IconCache.shared.prewarm(scanned)
         }
     }
 
