@@ -16,6 +16,7 @@
 ## 编码坑
 - Swift 6 成员初始化器不含带默认值的存储属性；`NSEvent.Phase` 是 OptionSet 用 `.isEmpty` 判无惯性。
 - App 中文名：手写按 `Locale.preferredLanguages`+实际 .lproj 匹配（地区码取 `parts.last`），禁用 `Bundle.localizedString`/`localizedInfoDictionary`（en 开发语言+无 CFBundleLocalizations 时错选 en）。见 `AppScanner.localizedDisplayName`。
+- **第一方 App（Photos/Music…）中文化兜底（2026-07-26 落地）**：这些 app 自身 bundle 的 zh_CN.lproj 为空、只有英文 `CFBundleDisplayName`，手写匹配救不了。需在 `makeAppInfo` 里：当手写 `localizedDisplayName` 回退到 `baseDisplayName`（即 bundle 无可用本地化）时，再调 Launch Services 私有 API `LSCopyApplicationName(url)` 取**系统级**中文名（来源 `ApplicationLocalizations.strings`，与访达/系统启动台一致 → Photos="照片"）。⚠️ macOS 26 该私有符号**已从全局符号表移除**（`dlsym` 解析不到），故必须用 `dlopen(nil,0)+dlsym` 动态解析并**安全降级**（解析不到就沿用原英文名，不报错）。`NSURLLocalizedNameKey`/`LSCopyDisplayNameForURL` 经实测**只做文件级本地化**，即使强制中文仍返回 "Photos"，取不到"照片"——不可用。`LSCopyApplicationName` 走 LS 内存缓存、亚毫秒级，且结果按 path 用 `OSAllocatedUnfairLock` memo 化，只在 bundle 无本地化时调用，**不拖慢启动**。若用户实测仍英文，说明其机器上符号也不在 → 退路：硬编码第一方 bundle id→中文名映射表。
 - 键盘 monitor 焦点门控：`isTextInputFirstResponder()` 放行必须同时要求 `!searchText.isEmpty`（聚焦空+可打印字符 return event 交 IME；聚焦有内容全交还；否则字母搜索/导航）。方向键/ESC 落入导航保翻页。
 - 搜索框 `@FocusState` 上提父视图，`onChange(isVisible)` 中 `false; async true` 强制聚焦；否则 IME 分裂 + 焦点残留吞箭头。
 - macOS 26 设置窗口 Toggle 视觉小：统一 `.toggleStyle(.switch).controlSize(.large)`；行内「字段-值」用 `LabeledContent("键") { 值 }` 替代 HStack+Spacer。
@@ -47,6 +48,12 @@
   ④ `NSViewRepresentable` 的 `.background` 子视图 `makeNSView` 时 `view.window == nil` → 想在那设 `window.level` 拿不到窗口（须改 `updateNSView` 等挂载后再设）；
   ⑤ 设置窗口打开时启动台键盘 monitor 仍在跑 → ESC 误关启动台/字母误入搜索，须 monitor 顶部 `guard panel?.isKeyWindow == true`。
   取舍：独立不透明窗口浮层→虚化只在窗口四周边缘外可见（非整屏虚化）；overlay 浮层需丢系统标题栏（样式变化）。若未来重做，要么接受样式变化（overlay 进 `LaunchpadView` ZStack + `FolderBackdropView` 虚化），要么手动托管半透明窗口。
+
+## 原生 Launchpad 布局导入（Tahoe 上可行！）
+- 用户需求：设置项「导入原生 macOS 启动台布局」。**重大修正（2026-07-26）**：此前误判 Tahoe 已移除 DB——其实是查错目录。正确路径：`/private$(getconf DARWIN_USER_DIR)com.apple.dock.launchpad/db/db`（即 `$(getconf DARWIN_USER_DIR)com.apple.dock.launchpad/db/db`，getconf DARWIN_USER_DIR 返回 `/var/folders/.../0/`）。**实测 macOS 26.5.1 该 db 存在（8.5MB）、legacy 三表 apps/groups/items 齐全、含中文标题（如"音乐""Safari浏览器"）**→ 自动导入当前系统布局完全可行，无需备份文件。
+- 参考实现：`references/LaunchNext/LaunchNext/NativeLaunchpadImporter.swift`（29103 字节，完整可用）。核心：① `nativeLaunchpadDatabasePath()` 用 `getconf DARWIN_USER_DIR` 拼路径；② `sqlite3_open_v2(path, &db, SQLITE_OPEN_READONLY, nil)` 只读打开；③ 查 `apps`(item_id,title,bundleid,storeid)、`groups`(item_id,title)、`items`(rowid,uuid,flags,type,parent_id,ordering)；type: 1=root 2=page 3=folder/container 4=app；按 parent_id+ordering 重建层级；④ 输出每"屏幕/页"的有序 cell 序列（app 或 folder），folder 内 app 列表由 group 名或前 3 个 app 名生成。
+- 本项目映射目标：`LayoutData`(pages:[[LayoutItem]], folders:[UUID:FolderInfo])。`import` 把 cell 序列按本机 itemsPerPage 重切页、folder→FolderInfo(id,name,appIDs)+.folder(id)、未安装 bundleID 跳过。导入前自动备份 `layout.json`→`layout.backup.json`。bundleID 匹配直接用本机已扫描 `data.allApps`（比 NSWorkspace 查找更稳）。项目未直接 import SQLite3，需确认 macOS SDK 自带 `SQLite3` module（LaunchNext 用 `import SQLite3` 可行）。
+- 注意：原生每页网格密度与本机 itemsPerPage 不同 → 推荐「保序+保文件夹、按本机密度重流」而非照搬原生绝对位置（避免大量空格）。
 
 ## 权威文档（后续 AI 必读）
 - 已完成功能：`docs/产品文档.md`　未完成/已放弃：`docs/待办事项.md`　技术知识库（坑/红线/架构）：`docs/开发指南.md`　分发流程步骤：`docs/分发流程.md`

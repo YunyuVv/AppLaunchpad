@@ -59,7 +59,13 @@ actor AppScanner {
     }
 
     private static func makeAppInfo(from url: URL) -> AppInfo? {
-        let plistURL = url.appendingPathComponent("Contents/Info.plist")
+        // 解析真实 bundle：普通 app 用 Contents/Info.plist；包裹型/非标 app（如安居客）
+        // 外层无 Contents/Info.plist，真实包内嵌在 Wrapper/Anjuke.app，且 Info.plist 在
+        // 顶层而非 Contents/。bundleURL 用于读资源/验 MAS，launchURL 始终用最外层 url
+        // （与 Finder/系统启动台一致，由系统按 wrapper 逻辑启动）；plistURL 是真正
+        // 包含 Info.plist 的文件位置（由 resolveBundle 按实际找到的路径返回，避免
+        // 误把正常 app 的 Info.plist 拼成顶层路径导致全部漏扫）。
+        guard let (plistURL, bundleURL, launchURL) = resolveBundle(at: url) else { return nil }
         guard
             let plist = NSDictionary(contentsOf: plistURL),
             let bundleID = plist["CFBundleIdentifier"] as? String,
@@ -85,7 +91,7 @@ actor AppScanner {
             url.deletingPathExtension().lastPathComponent
 
         let displayName = localizedDisplayName(
-            resourcesURL: url.appendingPathComponent("Contents/Resources"),
+            resourcesURL: bundleURL.appendingPathComponent("Contents/Resources"),
             developmentRegion: plist["CFBundleDevelopmentRegion"] as? String,
             fallback: baseDisplayName
         )
@@ -98,7 +104,7 @@ actor AppScanner {
         // 因此不会拖慢启动。无需任何私有符号 / dlsym。
         let finalDisplayName: String
         if displayName == baseDisplayName,
-           let sysName = systemDisplayName(for: url),
+           let sysName = systemDisplayName(for: launchURL),
            sysName != displayName
         {
             finalDisplayName = sysName
@@ -107,16 +113,64 @@ actor AppScanner {
         }
 
         let isMASApp = FileManager.default.fileExists(
-            atPath: url.appendingPathComponent("Contents/_MASReceipt").path
+            atPath: bundleURL.appendingPathComponent("Contents/_MASReceipt").path
+        )
+        || FileManager.default.fileExists(
+            atPath: bundleURL.appendingPathComponent("_MASReceipt").path
         )
 
         return AppInfo(
             id: bundleID,
             bundleID: bundleID,
             displayName: finalDisplayName,
-            url: url,
+            url: launchURL,
             isMASApp: isMASApp
         )
+    }
+
+    // MARK: - 包裹型 / 非标 app 解析
+
+    /// 解析候选 .app 的真实 Info.plist 位置，返回 `(plistURL, bundleURL, launchURL)`：
+    /// - `plistURL`：Info.plist 的实际文件路径。
+    /// - `bundleURL`：承载 Resources/_MASReceipt 的目录（正常 app = url；非标/包裹型
+    ///   = 真实内层包）。
+    /// - `launchURL`：始终为最外层 url（与 Finder/系统启动台一致，由系统走 wrapper 启动）。
+    /// 支持两类非标准结构：
+    /// 1) 包裹型 app：外层 .app 没有 Info.plist，真实可启动包内嵌在 `WrappedBundle`
+    ///    软链指向的 .app 或 `Wrapper/*.app` 中（例：安居客 → Wrapper/Anjuke.app）。
+    /// 2) 非标 app：Info.plist 不在 `Contents/` 下，直接裸在 bundle 顶层
+    ///    （例：安居客内层的 Anjuke.app/Info.plist）。
+    /// `depth` 用于防御 `WrappedBundle` 指向自身造成的无限递归。
+    private static func resolveBundle(at url: URL, depth: Int = 0) -> (plistURL: URL, bundleURL: URL, launchURL: URL)? {
+        guard depth < 4 else { return nil }
+
+        // 1) 标准结构：Contents/Info.plist
+        let contentsPlist = url.appendingPathComponent("Contents/Info.plist")
+        if FileManager.default.fileExists(atPath: contentsPlist.path) {
+            return (contentsPlist, url, url)
+        }
+        // 2) 非标结构：Info.plist 直接裸在 bundle 顶层
+        let topPlist = url.appendingPathComponent("Info.plist")
+        if FileManager.default.fileExists(atPath: topPlist.path) {
+            return (topPlist, url, url)
+        }
+        // 3) 包裹型：WrappedBundle 软链 → 内层 .app
+        let wrapped = url.appendingPathComponent("WrappedBundle")
+        if let inner = try? URL(resolvingAliasFileAt: wrapped, options: [.withoutUI]),
+           inner.pathExtension == "app",
+           let resolved = resolveBundle(at: inner, depth: depth + 1)
+        {
+            return (resolved.plistURL, resolved.bundleURL, url)
+        }
+        // 4) 包裹型：Wrapper/*.app
+        let wrapperDir = url.appendingPathComponent("Wrapper")
+        if let subs = try? FileManager.default.contentsOfDirectory(at: wrapperDir, includingPropertiesForKeys: nil),
+           let inner = subs.first(where: { $0.pathExtension == "app" }),
+           let resolved = resolveBundle(at: inner, depth: depth + 1)
+        {
+            return (resolved.plistURL, resolved.bundleURL, url)
+        }
+        return nil
     }
 
     /// 按用户首选语言 + bundle 实际 lproj 目录手动挑最佳匹配，
